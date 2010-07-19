@@ -1,0 +1,293 @@
+
+
+            String[] player1handGUI = new String[6];
+            player1handGUI[0] = "";
+            player1handGUI[1] = "";
+            player1handGUI[2] = "";
+            player1handGUI[3] = "";
+            player1handGUI[4] = "";
+            player1handGUI[5] = "";
+
+            int spaces = 71 - (6 * Field.player2scrollsInHand) - (int) (1 * ((uint) Field.player2scrollsInHand - 1));
+
+            for (int lines = 0; lines < player1handGUI.Length; lines++) {
+                for (int counter = 0; counter <= spaces; counter++)
+                {
+                    player1handGUI[lines] += " ";
+                }
+                if (lines == 0) {
+
+                }
+            }
+
+            Console.WriteLine(player1handGUI[0]);
+            Console.WriteLine(player1handGUI[1]);
+            Console.WriteLine(player1handGUI[2]);
+            Console.WriteLine(player1handGUI[3]);
+            Console.WriteLine(player1handGUI[4]);
+            Console.WriteLine(player1handGUI[5]);
+
+            Console.ReadLine();
+
+            /* if (Field.player2scrollsInHand == 0)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                                                                       ");
+            }
+            else if (Field.player2scrollsInHand == 1)
+            {
+                Console.WriteLine("                                 ┌────┐                                ");
+                Console.WriteLine("                                 │    │                                ");
+                Console.WriteLine("                                 │    │                                ");
+                Console.WriteLine("                                 │    │                                ");
+                Console.WriteLine("                                 └────┘                                ");
+                Console.WriteLine("                                                                       ");
+            }
+            else if (Field.player2scrollsInHand == 2)
+            {
+                Console.WriteLine("                             ┌────┐ ┌────┐                             ");
+                Console.WriteLine("                             │    │ │    │                             ");
+                Console.WriteLine("                             │    │ │    │                             ");
+                Console.WriteLine("                             │    │ │    │                             ");
+                Console.WriteLine("                             └────┘ └────┘                             ");
+                Console.WriteLine("                                                                       ");
+            }
+            else if (Field.player2scrollsInHand == 3)
+            {
+                Console.WriteLine("                         ┌────┐ ┌────┐ ┌────┐                          ");
+                Console.WriteLine("                         │    │ │    │ │    │                          ");
+                Console.WriteLine("                         │    │ │    │ │    │                          ");
+                Console.WriteLine("                         │    │ │    │ │    │                          ");
+                Console.WriteLine("                         └────┘ └────┘ └────┘                          ");
+                Console.WriteLine("                                                                       ");
+            }
+            else if (Field.player2scrollsInHand == 4)
+            {
+                Console.WriteLine("                      ┌────┐ ┌────┐ ┌────┐ ┌────┐                      ");
+                Console.WriteLine("                      │    │ │    │ │    │ │    │                      ");
+                Console.WriteLine("                      │    │ │    │ │    │ │    │                      ");
+                Console.WriteLine("                      │    │ │    │ │    │ │    │                      ");
+                Console.WriteLine("                      └────┘ └────┘ └────┘ └────┘                      ");
+                Console.WriteLine("                                                                       ");
+            }
+            else if (Field.player2scrollsInHand == 5)
+            {
+                Console.WriteLine("                   ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐                  ");
+                Console.WriteLine("                   │    │ │    │ │    │ │    │ │    │                  ");
+                Console.WriteLine("                   │    │ │    │ │    │ │    │ │    │                  ");
+                Console.WriteLine("                   │    │ │    │ │    │ │    │ │    │                  ");
+                Console.WriteLine("                   └────┘ └────┘ └────┘ └────┘ └────┘                  ");
+                Console.WriteLine("                                                                       ");
+            }
+            else if (Field.player2scrollsInHand == 6)
+            {
+                Console.WriteLine("               ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐               ");
+                Console.WriteLine("               │    │ │    │ │    │ │    │ │    │ │    │               ");
+                Console.WriteLine("               │    │ │    │ │    │ │    │ │    │ │    │               ");
+                Console.WriteLine("               │    │ │    │ │    │ │    │ │    │ │    │               ");
+                Console.WriteLine("               └────┘ └────┘ └────┘ └────┘ └────┘ └────┘               ");
+                Console.WriteLine("                                                                       ");
+            }
+            else if (Field.player2scrollsInHand == 7)
+            {
+                Console.WriteLine("           ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐            ");
+                Console.WriteLine("           │    │ │    │ │    │ │    │ │    │ │    │ │    │            ");
+                Console.WriteLine("           │    │ │    │ │    │ │    │ │    │ │    │ │    │            ");
+                Console.WriteLine("           │    │ │    │ │    │ │    │ │    │ │    │ │    │            ");
+                Console.WriteLine("           └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘            ");
+                Console.WriteLine("                                                                       ");
+            }
+            else if (Field.player2scrollsInHand == 8)
+            {
+                Console.WriteLine("        ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐        ");
+                Console.WriteLine("        │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │        ");
+                Console.WriteLine("        │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │        ");
+                Console.WriteLine("        │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │        ");
+                Console.WriteLine("        └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘        ");
+                Console.WriteLine("                                                                       ");
+            }
+            else if (Field.player2scrollsInHand == 9)
+            {
+                Console.WriteLine("    ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐     ");
+                Console.WriteLine("    │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │     ");
+                Console.WriteLine("    │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │     ");
+                Console.WriteLine("    │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │     ");
+                Console.WriteLine("    └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘     ");
+                Console.WriteLine("                                                                       ");
+            }
+            else if (Field.player2scrollsInHand == 10)
+            {
+                Console.WriteLine(" ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ");
+                Console.WriteLine(" │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ ");
+                Console.WriteLine(" │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ ");
+                Console.WriteLine(" │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ ");
+                Console.WriteLine(" └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ ");
+                Console.WriteLine("                                                                       ");
+            } */
+            Console.WriteLine("                    ┌────┬────┬────┬────┬────┬────┐                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    ├────┼────┼────┼────┼────┼────│                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    ├────┼────┼────┼────┼────┼────│                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    └────┴────┴────┴────┴────┴────┘                    ");
+            Console.WriteLine("                                                                       ");
+            Console.WriteLine("                    ┌────┐                   ┌────┐                    ");
+            Console.WriteLine("                    │    ├─────────┬─────────┤    │                    ");
+            Console.WriteLine("                    │    │   " + player2tens + "     │   " + player1tens + "     │    │                    ");
+            Console.WriteLine("                    │    │     " + player2ones + "   │     " + player1ones + "   │    │                    ");
+            Console.WriteLine("                    │    ├─────────┴─────────┤    │                    ");
+            Console.WriteLine("                    └────┘                   └────┘                    ");
+            Console.WriteLine("                                                                       ");
+            Console.WriteLine("                    ┌────┬────┬────┬────┬────┬────┐                    ");
+            Console.WriteLine("                    │" + Field.player1frontLine1.nameAbb +
+                              "│" + Field.player1frontLine2.nameAbb +
+                              "│" + Field.player1frontLine3.nameAbb +
+                              "│" + Field.player1frontLine4.nameAbb +
+                              "│" + Field.player1frontLine5.nameAbb +
+                              "│" + Field.player1frontLine6.nameAbb +
+                              "│                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    ├──" +
+                            "──┼──" +
+                            "──┼──" +
+                            "──┼──" +
+                            "──┼──" +
+                            "──┼──" +
+                            "──│                    ");
+            Console.WriteLine("                    │" + Field.player1forwardLine1.nameAbb +
+                              "│" + Field.player1forwardLine2.nameAbb +
+                              "│" + Field.player1forwardLine3.nameAbb +
+                              "│" + Field.player1forwardLine4.nameAbb +
+                              "│" + Field.player1forwardLine5.nameAbb +
+                              "│" + Field.player1forwardLine6.nameAbb +
+                              "│                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    ├──" +
+                            "──┼──" +
+                            "──┼──" +
+                            "──┼──" +
+                            "──┼──" +
+                            "──┼──" +
+                            "──│                    ");
+            Console.WriteLine("                    │" + Field.player1rearLine1.nameAbb +
+                              "│" + Field.player1rearLine2.nameAbb +
+                              "│" + Field.player1rearLine3.nameAbb +
+                              "│" + Field.player1rearLine4.nameAbb +
+                              "│" + Field.player1rearLine5.nameAbb +
+                              "│" + Field.player1rearLine6.nameAbb +
+                              "│                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    │    │    │    │    │    │    │                    ");
+            Console.WriteLine("                    └────┴────┴────┴────┴────┴────┘                    ");
+            if (Field.player1scrollsInHand == 0)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                                                                       ");
+            }
+            else if (Field.player1scrollsInHand == 1)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                                 ┌────┐                                ");
+                Console.WriteLine("                                 │    │                                ");
+                Console.WriteLine("                                 │    │                                ");
+                Console.WriteLine("                                 │    │                                ");
+                Console.WriteLine("                                 └────┘                                ");
+            }
+            else if (Field.player1scrollsInHand == 2)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                             ┌────┐ ┌────┐                             ");
+                Console.WriteLine("                             │    │ │    │                             ");
+                Console.WriteLine("                             │    │ │    │                             ");
+                Console.WriteLine("                             │    │ │    │                             ");
+                Console.WriteLine("                             └────┘ └────┘                             ");
+            }
+            else if (Field.player1scrollsInHand == 3)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                         ┌────┐ ┌────┐ ┌────┐                          ");
+                Console.WriteLine("                         │    │ │    │ │    │                          ");
+                Console.WriteLine("                         │    │ │    │ │    │                          ");
+                Console.WriteLine("                         │    │ │    │ │    │                          ");
+                Console.WriteLine("                         └────┘ └────┘ └────┘                          ");
+            }
+            else if (Field.player1scrollsInHand == 4)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                      ┌────┐ ┌────┐ ┌────┐ ┌────┐                      ");
+                Console.WriteLine("                      │    │ │    │ │    │ │    │                      ");
+                Console.WriteLine("                      │    │ │    │ │    │ │    │                      ");
+                Console.WriteLine("                      │    │ │    │ │    │ │    │                      ");
+                Console.WriteLine("                      └────┘ └────┘ └────┘ └────┘                      ");
+            }
+            else if (Field.player1scrollsInHand == 5)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("                   ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐                  ");
+                Console.WriteLine("                   │    │ │    │ │    │ │    │ │    │                  ");
+                Console.WriteLine("                   │    │ │    │ │    │ │    │ │    │                  ");
+                Console.WriteLine("                   │    │ │    │ │    │ │    │ │    │                  ");
+                Console.WriteLine("                   └────┘ └────┘ └────┘ └────┘ └────┘                  ");
+            }
+            else if (Field.player1scrollsInHand == 6)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("               ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐               ");
+                Console.WriteLine("               │    │ │    │ │    │ │    │ │    │ │    │               ");
+                Console.WriteLine("               │    │ │    │ │    │ │    │ │    │ │    │               ");
+                Console.WriteLine("               │    │ │    │ │    │ │    │ │    │ │    │               ");
+                Console.WriteLine("               └────┘ └────┘ └────┘ └────┘ └────┘ └────┘               ");
+            }
+            else if (Field.player1scrollsInHand == 7)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("           ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐            ");
+                Console.WriteLine("           │    │ │    │ │    │ │    │ │    │ │    │ │    │            ");
+                Console.WriteLine("           │    │ │    │ │    │ │    │ │    │ │    │ │    │            ");
+                Console.WriteLine("           │    │ │    │ │    │ │    │ │    │ │    │ │    │            ");
+                Console.WriteLine("           └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘            ");
+            }
+            else if (Field.player1scrollsInHand == 8)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("        ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐        ");
+                Console.WriteLine("        │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │        ");
+                Console.WriteLine("        │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │        ");
+                Console.WriteLine("        │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │        ");
+                Console.WriteLine("        └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘        ");
+            }
+            else if (Field.player1scrollsInHand == 9)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine("    ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐     ");
+                Console.WriteLine("    │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │     ");
+                Console.WriteLine("    │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │     ");
+                Console.WriteLine("    │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │     ");
+                Console.WriteLine("    └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘     ");
+            }
+            else if (Field.player1scrollsInHand == 10)
+            {
+                Console.WriteLine("                                                                       ");
+                Console.WriteLine(" ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ");
+                Console.WriteLine(" │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ ");
+                Console.WriteLine(" │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ ");
+                Console.WriteLine(" │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ │    │ ");
+                Console.WriteLine(" └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ ");
+            }
