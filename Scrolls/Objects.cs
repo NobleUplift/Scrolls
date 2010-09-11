@@ -1,226 +1,312 @@
-﻿using System;
+﻿/**
+ * Default
+ */
+using System;
 //using System.Collections.Generic;
 //using System.Linq;
 //using System.Text;
 
-/*
+/**
+ * Custom
+ */
+using System.Data.SqlServerCe; // Compact Edition
+//using System.Data.SqlClient; // Full Edition
+using System.Collections;	   // ArrayList
+
+/**
  * Native Namespaces
  */
 using Scrolls;
-using Decks;
 using Commands;
 using Objects;
 using Board;
+using ArtificialIntelligence;
 
 namespace Objects
 {
-    public struct Field
-    {
-        /*
-         * Player 1
-         */
-        public static int player1scrollsInDeck;
-        public static int player1scrollsInHand;
-        public static int player1scrollsInVoid;
-        public static Scroll[] player1deck;
-        public static Scroll[] player1hand;
-        public static Scroll[] player1void;
-        public static Scroll player1battlefield;
+	public struct Field {
+		/**
+		 * Arrays containing the field's scrolls
+		 * 
+		 * [0, x, y] - Player 1
+		 * [1, x, y] - Player 2
+		 * [x, 0, y] - Front Line
+		 * [x, 1, y] - Forward Line
+		 * [x, 2, y] - Equipment Line
+		 * [x, y, z] - Individual scroll from left to right
+		 */
+		public static Scroll[,,] playerLines;
 
-        public static Scroll player1frontLine1;
-        public static Scroll player1frontLine2;
-        public static Scroll player1frontLine3;
-        public static Scroll player1frontLine4;
-        public static Scroll player1frontLine5;
-        public static Scroll player1frontLine6;
+		/**
+		 * Array containing the number of Scrolls in each players'
+		 * deck, hand, and void.
+		 * 
+		 * [0, x] - Player 1
+		 * [1, x] - Player 2
+		 * [x, 0] - Deck
+		 * [x, 1] - Hand
+		 * [x, 2] - Void
+		 */
+		public static short[,] scrollsIn;
 
-        public static Scroll player1forwardLine1;
-        public static Scroll player1forwardLine2;
-        public static Scroll player1forwardLine3;
-        public static Scroll player1forwardLine4;
-        public static Scroll player1forwardLine5;
-        public static Scroll player1forwardLine6;
+		/**
+		 * scrollLists
+		 * ArrayList acting as a Stack
+		 * 
+		 * [0, x] - Player 1
+		 * [1, x] - Player 2
+		 * [x, 0] - Deck
+		 * [x, 1] - Hand
+		 * [x, 2] - Void
+		 */
+		public static ArrayList[,] scrollLists;
 
-        public static Scroll player1rearLine1;
-        public static Scroll player1rearLine2;
-        public static Scroll player1rearLine3;
-        public static Scroll player1rearLine4;
-        public static Scroll player1rearLine5;
-        public static Scroll player1rearLine6;
+		// Scroll array of size 2 containing both Battlefield cards
+		public static Scroll[] battlefields;
 
-        /*
-         * Player 2
-         */
+		public Field(short deck1, short deck2) {
+			Field.playerLines = new Scroll[2, 3, 6];
+			// Create a new scroll for every cell
+			for (short player = 0; player < 2; player++)
+				for (short line = 0; line < 3; line++)
+					for (short scroll = 0; scroll < 6; scroll++)
+						Field.playerLines[player, line, scroll] = new Scroll();
+			Field.scrollsIn = new short[2, 3];
+			Field.scrollLists = new ArrayList[2,3];
+			for (short player = 0; player < 2; player++)
+				for (short scrolls = 0; scrolls < 3; scrolls++)
+					Field.scrollLists[player, scrolls] = new ArrayList();
+			Field.battlefields = new Scroll[2];
 
-        public static int player2scrollsInDeck;
-        public static int player2scrollsInHand;
-        public static int player2scrollsInVoid;
-        public static Scroll[] player2deck;
-        public static Scroll[] player2hand;
-        public static Scroll[] player2void;
-        public static Scroll player2battlefield;
+			/**
+			 * Player 1
+			 */
+			Field.scrollsIn[0, 0] = deck1;
+			Field.scrollsIn[0, 1] = 0;
+			Field.scrollsIn[0, 2] = 0;
+			Field.battlefields[0] = new Scroll();
 
-        public static Scroll player2frontLine1;
-        public static Scroll player2frontLine2;
-        public static Scroll player2frontLine3;
-        public static Scroll player2frontLine4;
-        public static Scroll player2frontLine5;
-        public static Scroll player2frontLine6;
+			/**
+			 * Player 2
+			 */
+			Field.scrollsIn[1, 0] = deck2;
+			Field.scrollsIn[1, 1] = 0;
+			Field.scrollsIn[1, 2] = 0;
+			Field.battlefields[1] = new Scroll();
+		}
+	}
 
-        public static Scroll player2forwardLine1;
-        public static Scroll player2forwardLine2;
-        public static Scroll player2forwardLine3;
-        public static Scroll player2forwardLine4;
-        public static Scroll player2forwardLine5;
-        public static Scroll player2forwardLine6;
+	public class Deck : IDisposable {
+		public int[,] deck;
+		//public static ArrayList scrolls = new ArrayList();
+		public short capacity;
 
-        public static Scroll player2rearLine1;
-        public static Scroll player2rearLine2;
-        public static Scroll player2rearLine3;
-        public static Scroll player2rearLine4;
-        public static Scroll player2rearLine5;
-        public static Scroll player2rearLine6;
-    }
+		private string database = "Data Source=|DataDirectory|\\BoosterPacks.sdf";
+		/* + 
+		 "Persist Security Info=false;" +
+		 "Initial Catalog=Aztec;" +
+		 "Integrated Security=SSPI;" +
+		 "Application Name=Scrolls"*/
+		private SqlCeConnection connection;
 
-    public class Deck : Object
-    {
-        public string name;
-        public int scrollsInDeck;
-        public string[] scrolls;
-    }
+		public Deck(int[,] deck, short capacity) {
+			this.deck = deck;
+			this.capacity = capacity;
 
-    public class Scroll : Object
-    {
-        // 1 for Front Line, 2 for Back Line, 3 for Either, and 4 for Equipment
-        public int line;
-        public string nameAbb;
-        public string typeAbb;
+			this.connection = new SqlCeConnection(this.database);
+			try {
+				this.connection.Open();
+			} catch (Exception e) {
+				Console.WriteLine("Database Connection Failed!");
+				Console.WriteLine(e.ToString());
+			}
+		}
 
-        public string name;
-        public string stance;
-        public string[] types;
-        public string[] attacks;
-        public int endurance;
-        public int armor;
-        public int accuracy;
-        public int intelligence;
-        public string resistence;
-        public string weakness;
+		~Deck() {
+			try {
+				this.connection.Close();
+			} catch (Exception e) {
+				//Console.WriteLine("Database Connection Could Not Close!");
+				//Console.WriteLine(e.ToString());
+			}
+		}
 
-        // Only for Equipment scrolls
-        public string effect;
+		void IDisposable.Dispose() {
+			try {
+				this.connection.Close();
+			} catch (Exception e) { }
+		}
 
-        // Hidden
-        public string creator;
-        public int date;
+		public void Make() {
+			SqlCeDataReader myReader = null;
+			SqlCeCommand myCommand = null;
+			Scroll row = null;
+			string[] types;
+			string[] attacks;
+			try {
+				myCommand = new SqlCeCommand("SELECT * FROM Aztec", this.connection);
+				myReader = myCommand.ExecuteReader();
+				while (myReader.Read())
+				{
+					types = myReader["types"].ToString().Split(',');
+					attacks = myReader["attacks"].ToString().Split(',');
+					row = new Scroll(Convert.ToInt32(myReader["id"]),
+									 Convert.ToInt16(myReader["line"]),
+									 myReader["nameAbb"].ToString(),
+									 myReader["typeAbb"].ToString(),
+									 myReader["name"].ToString(),
+									 types,
+									 attacks,
+									 Convert.ToInt16(myReader["endurance"]),
+									 Convert.ToInt16(myReader["armor"]),
+									 Convert.ToInt16(myReader["accuracy"]),
+									 Convert.ToInt16(myReader["intelligence"]),
+									 myReader["resistence"].ToString(),
+									 myReader["weakness"].ToString(),
+									 myReader["effect"].ToString());
+					//Console.WriteLine(row);
+					//Deck.scrolls.Add(row);
+					Field.scrollLists[0, 0].Add(row);
+				}
+			} catch (Exception e) {
+				Console.WriteLine("Database Reader Failed!");
+				Console.WriteLine(e.ToString());
+			}
+		}
 
-        /*
-         * Constructors
-         */
+		public void CreatePack(string table) {
+			SqlCeCommand insert = new SqlCeCommand(
+				"CREATE TABLE " + table + "", this.connection);
+		}
+	}
 
-        public Scroll()
-        {
-            this.line = -1;
-            this.nameAbb = "    ";
-            this.name = "";
-            this.stance = "";
-            string[] nulltypes = { };
-            this.types = nulltypes;
-            string[] nullAttacks = { };
-            this.attacks = nullAttacks;
-            this.endurance = 0;
-            this.armor = 0;
-            this.accuracy = 0;
-            this.intelligence = 0;
-            this.resistence = "";
-            this.weakness = "";
-        }
+	public class Scroll : Object {
+		public int id;
+		// 1 for Front Line, 2 for Back Line, 3 for Either, and 4 for Equipment
+		public short line;
+		public string nameAbb;
+		public string typeAbb;
 
-        public Scroll(int id ,
-						int line,
-                        string nameAbb,
-                        string typeAbb,
-                        string name,
-                        string[] types,
-                        string[] attacks,
-                        int endurance,
-                        int armor,
-                        int accuracy,
-                        int intelligence,
-                        string resistence,
-                        string weakness,
-						string effect)
-        {
-            this.line = line;
-            this.nameAbb = nameAbb;
+		public string name;
+		public string stance;
+		public string[] types;
+		public string[] attacks;
+
+		public short endurance;
+		public short armor;
+		public short accuracy;
+		public short intelligence;
+
+		public string resistence;
+		public string weakness;
+
+		// Only for Equipment scrolls
+		public string effect;
+
+		// Hidden
+		public string creator;
+		public short date;
+
+		/**
+		 * 
+		 * Constructors
+		 * 
+		 */
+		public Scroll() {
+			this.id = 0;
+			this.line = -1;
+			this.nameAbb = "     ";
+			this.typeAbb = "     ";
+
+			this.name = "";
+			this.stance = "";
+			this.types = null;
+			this.attacks = null;
+			this.endurance = 0;
+			this.armor = 0;
+			this.accuracy = 0;
+			this.intelligence = 0;
+			this.resistence = "";
+			this.weakness = "";
+		}
+
+		public Scroll(int id ,
+						short line,
+						string nameAbb,
+						string typeAbb,
+						string name,
+						string[] types,
+						string[] attacks,
+						short endurance,
+						short armor,
+						short accuracy,
+						short intelligence,
+						string resistence,
+						string weakness,
+						string effect) {
+			this.id = id;
+			this.line = line;
+			this.nameAbb = nameAbb;
 			this.typeAbb = typeAbb;
 
-            this.name = name;
-            this.types = types;
-            this.attacks = attacks;
-            this.endurance = endurance;
-            this.armor = armor;
-            this.accuracy = accuracy;
-            this.intelligence = intelligence;
-            this.resistence = resistence;
-            this.weakness = weakness;
-        }
+			this.name = name;
+			this.types = types;
+			this.attacks = attacks;
+			this.endurance = endurance;
+			this.armor = armor;
+			this.accuracy = accuracy;
+			this.intelligence = intelligence;
+			this.resistence = resistence;
+			this.weakness = weakness;
+		}
 
-        public Scroll(int line, string nameAbb, string name, string effect)
-        {
-            this.line = line;
-            this.nameAbb = nameAbb;
-            this.name = name;
-            this.effect = effect;
-        }
+		public Scroll(short line, string nameAbb, string name, string effect) {
+			this.line = line;
+			this.nameAbb = nameAbb;
+			this.name = name;
+			this.effect = effect;
+		}
 
-        /* 
-         * Methods
-         */
-        public String getNameAbb()
-        {
-            return this.nameAbb;
-        }
-
-        public override String ToString()
-        {
-            if (line < 3)
-            {
-                String returnString = "Entity";
-                returnString += "\nName         : " + this.name;
-                //returnString += "\nStance       : " + this.stance;
-                returnString += "\nTypes        : ";
-                try
-                {
-                    foreach (string type in types)
-                    {
+		/**
+		 * 
+		 * Methods
+		 * 
+		 */
+		public override String ToString() {
+			if (line < 3) {
+				String returnString = "Entity";
+				returnString += "\nName		 : " + this.name;
+				//returnString += "\nStance	   : " + this.stance;
+				returnString += "\nTypes		: ";
+				try
+				{
+					foreach (string type in types)
+					{
 						returnString += "\"" + type + "\" ";
 					}
 				} catch (NullReferenceException) { }
-				returnString += "\nAttacks      : ";
-                try
-                {
-                    foreach (string attack in attacks)
-                    {
-                        returnString += "\"" + attack + "\" ";
-                    }
-                }
-                catch (NullReferenceException) { }
-                returnString += "\nEndurance    : " + this.endurance;
-                returnString += "\nArmor        : " + this.armor;
-                returnString += "\nAccuracy     : " + this.accuracy;
-                returnString += "\nIntelligence : " + this.intelligence;
-                returnString += "\nResistence   : " + this.resistence;
-                returnString += "\nWeakness     : " + this.weakness;
-                return returnString;
-            }
-            else
-            {
-                String returnString = "Equipment";
-                returnString += "\nName: " + this.name;
-                returnString += "\nEffect: " + this.effect;
-                return returnString;
-            }
-        }
-    }
+				returnString += "\nAttacks	  : ";
+				try
+				{
+					foreach (string attack in attacks)
+					{
+						returnString += "\"" + attack + "\" ";
+					}
+				}
+				catch (NullReferenceException) { }
+				returnString += "\nEndurance	: " + this.endurance;
+				returnString += "\nArmor		: " + this.armor;
+				returnString += "\nAccuracy	 : " + this.accuracy;
+				returnString += "\nIntelligence : " + this.intelligence;
+				returnString += "\nResistence   : " + this.resistence;
+				returnString += "\nWeakness	 : " + this.weakness;
+				return returnString;
+			} else {
+				String returnString = "Equipment";
+				returnString += "\nName: " + this.name;
+				returnString += "\nEffect: " + this.effect;
+				return returnString;
+			}
+		}
+	}
 }
