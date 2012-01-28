@@ -22,8 +22,7 @@ using Objects;
 using Board;
 using ArtificialIntelligence;
 
-namespace Scrolls
-{
+namespace Scrolls {
 	public class Program
 	{
 		public bool quit = false;
@@ -34,7 +33,12 @@ namespace Scrolls
 			Console.SetWindowSize(82,52);
 
 			// Welcome the user, setup the field, print the board, make the deck, and wait
-			Console.WriteLine("             Welcome to Scrolls!             ");
+            String introduction = "Welcome to Scrolls!";
+            String margin = "";
+            for (int i = 0; i < (81 - introduction.Length) / 2; i++)
+                margin += " ";
+            BasicBoard.title = margin + introduction + margin;
+		    //Console.WriteLine(BasicBoard.title);
 			new Field(40,40);
 			BasicBoard.PrintBoard();
 			int[,] scroll1 = { { 10000000, 1 },
