@@ -74,8 +74,12 @@ namespace Commands {
 			//Console.WriteLine((Field.scrollLists[player, 0].Count - 1));
 			//Field.scrollLists[player, 1].Add( Field.scrollLists[player, 0][ Field.scrollLists[player, 0].Count) ] );
 			//Field.scrollLists[player, 0].RemoveAt( Field.scrollLists[player, 0].Count );
-			Field.scrollsIn[player, 0]--; // Decrease player's deck
-			Field.scrollsIn[player, 1]++; // Increase player's hand
+            if (Field.scrollsIn[player, 1] < 11) {
+                Field.scrollsIn[player, 0]--; // Decrease player's deck
+                Field.scrollsIn[player, 1]++; // Increase player's hand
+            } else {
+                Console.Write("");
+            }
 		}
 	}
 }
