@@ -22,15 +22,40 @@ using ArtificialIntelligence;
 
 namespace Board {
 	public class BasicBoard {
+        public static String title = "";
+
 		public static void PrintBoard() {
+            Console.WriteLine(title);
 			short[] two = GetDeckCount(Field.scrollsIn[1, 0]);
 			short[] one = GetDeckCount(Field.scrollsIn[0, 0]);
 
-			string margin = "                      ";
+            string margin = "                      ";
+            string top = "┌─────╥─────╥─────╥─────╥─────╥─────┐";
+            string bars = "││   │║│   │║│   │║│   │║│   │║│   ││";
+            string types = "│     ║     ║     ║     ║     ║     │";
+            string names = "│     ║     ║     ║     ║     ║     │";
+            //string types  = "│";
+            //string names  = "│";
+            string middle = "╞═════╬═════╬═════╬═════╬═════╬═════╡";
+            string bottom = "└─────╨─────╨─────╨─────╨─────╨─────┘";
+            string midtop = "┌─────╖                       ╓─────┐";
+            string mid2up = "│     ╟───────────╥───────────╢     │";
+            string midone = "│     ║    " + two[0] + "      ║    " + one[0] + "      ║     │";
+            string midtwo = "│     ║      " + two[1] + "    ║      " + one[1] + "    ║     │";
+            string mid2dn = "│     ╟───────────╨───────────╢     │";
+            string midbot = "└─────╜                       ╙─────┘";
+
+            string handTop = "┌─────┐";
+            string handMid = "│     │";
+            string handBot = "└─────┘";
+
+			/*string margin = "                      ";
 			string top    = "┌─────┬─────┬─────┬─────┬─────┬─────┐";
 			string bars   = "│     │     │     │     │     │     │";
-			string types  = "│";
-			string names  = "│";
+            string types  = "│     │     │     │     │     │     │";
+            string names  = "│     │     │     │     │     │     │";
+			//string types  = "│";
+			//string names  = "│";
 			string middle = "├─────┼─────┼─────┼─────┼─────┼─────│";
 			string bottom = "└─────┴─────┴─────┴─────┴─────┴─────┘";
 			string midtop = "┌─────┐                       ┌─────┐";
@@ -42,8 +67,12 @@ namespace Board {
 			
 			string handTop = "┌─────┐";
 			string handMid = "│     │";
-			string handBot = "└─────┘";
-			string handMargin = GetHandMargin(1);
+			string handBot = "└─────┘";*/
+
+            /*
+             * Print Player 2's Hand
+             */
+            string handMargin = GetHandMargin(1);
 			String[] handLines = new String[6];
 
 			short handNum = Field.scrollsIn[1, 1];
@@ -65,29 +94,36 @@ namespace Board {
 			WriteMargin(handMargin, handLines[0]);
 			for (short counter = 0; counter < 3; counter++)
 				WriteMargin(handMargin, handLines[1]);
-			WriteMargin(handMargin, handLines[2]);
+            WriteMargin(handMargin, handLines[2]);
+            Console.WriteLine(); 
 
-			Console.WriteLine(); 
+            /*
+             * Print Player 2's Battlefield
+             */
 			WriteMargin(margin, top);
 			for (short line = 2; line > -1; line--) {
-				WriteMargin(margin, bars);
-				for (short scroll = 0; scroll < 6; scroll++)
-					types += Field.playerLines[1, line, scroll].typeAbb + "│";
+				//WriteMargin(margin, bars); 
+				//for (short scroll = 0; scroll < 6; scroll++)
+				//	types += Field.playerLines[1, line, scroll].typeAbb + "│";
+                types = "│┌───┐║┌───┐║┌───┐║┌───┐║┌───┐║┌───┐│";
 				WriteMargin(margin, types);
-				types = "│";
+				//types = "│";
 
-				for (short scroll = 0; scroll < 6; scroll++)
-					names += Field.playerLines[1, line, scroll].nameAbb + "│";
+                WriteMargin(margin, bars); 
+
+				//for (short scroll = 0; scroll < 6; scroll++)
+				//	names += Field.playerLines[1, line, scroll].nameAbb + "│";
+                names = "│└───┘║└───┘║└───┘║└───┘║└───┘║└───┘│";
 				WriteMargin(margin, names);
-				names = "│";
+				//names = "│";
 
 				if (line != 0)
 					WriteMargin(margin, middle);
 			}
-			WriteMargin(margin, bottom);
+            WriteMargin(margin, bottom);
+            Console.WriteLine();
 
 			// Write the middle section of the field
-			Console.WriteLine();
 			WriteMargin(margin, midtop);
 			WriteMargin(margin, mid2up);
 			WriteMargin(margin, midone);
@@ -96,23 +132,61 @@ namespace Board {
 			WriteMargin(margin, midbot);
 			Console.WriteLine();
 
+            /*
+             * Print Player 1's field
+             */
 			WriteMargin(margin, top);
 			for (short line = 2; line > -1; line--) {
-				for (short scroll = 0; scroll < 6; scroll++)
-					names += Field.playerLines[0, line, scroll].nameAbb + "│";
+				//for (short scroll = 0; scroll < 6; scroll++)
+				//	names += Field.playerLines[0, line, scroll].nameAbb + "│";
+                names = "│┌───┐║┌───┐║┌───┐║┌───┐║┌───┐║┌───┐│";
 				WriteMargin(margin, names);
-				names = "│";
+				//names = "│";
 
-				for (short scroll = 0; scroll < 6; scroll++)
-					types += Field.playerLines[0, line, scroll].typeAbb + "│";
-				WriteMargin(margin, types);
-				types = "│";
-				WriteMargin(margin, bars);
+                WriteMargin(margin, bars); 
+
+				//for (short scroll = 0; scroll < 6; scroll++)
+				//	types += Field.playerLines[0, line, scroll].typeAbb + "│";
+                types = "│└───┘║└───┘║└───┘║└───┘║└───┘║└───┘│";
+                WriteMargin(margin, types);
+				//types = "│";
+				//WriteMargin(margin, bars);
 				
 				if (line != 0)
 					WriteMargin(margin, middle);
 			}
 			WriteMargin(margin, bottom);
+
+            /*
+             * Print Player 1's hand
+             */
+            // COPYPASTA
+            handMargin = GetHandMargin(0);
+
+            handLines = new String[6];
+
+            handNum = Field.scrollsIn[0, 1];
+            // Initialize Stings for handLines
+            for (short counter = 0; counter < handLines.Length; counter++)
+                handLines[counter] = "";
+
+            for (short counter = 0; counter < handNum; counter++)
+            {
+                handLines[0] += handTop;
+                handLines[1] += handMid;
+                handLines[2] += handBot;
+                if (counter != handNum - 1) // If counter is not 0, i.e. one scroll in hand
+                {
+                    handLines[0] += " ";
+                    handLines[1] += " ";
+                    handLines[2] += " ";
+                }
+            }
+
+            WriteMargin(handMargin, handLines[0]);
+            for (short counter = 0; counter < 3; counter++)
+                WriteMargin(handMargin, handLines[1]);
+            WriteMargin(handMargin, handLines[2]);
 		}
 
 		/**
@@ -126,9 +200,9 @@ namespace Board {
 			short tens;
 			short ones;
 			if (scrollsInDeck != 0) {
-				tens = (short) (scrollsInDeck / 10);
+				tens = (short) (scrollsInDeck / 10); // Divide by 10 and automatically round with cast
 				if (tens != 0)
-					ones = (short) (scrollsInDeck % (tens * 10));
+					ones = (short) (scrollsInDeck % (tens * 10)); // Divide 
 				else
 					ones = scrollsInDeck;
 			} else {
@@ -147,13 +221,13 @@ namespace Board {
 		 * @return        
 		 */
 		private static string GetHandMargin(short player) {
-			short hand = Field.scrollsIn[player, 1];
-			short spaces = (short) (81 - hand * 7);
+			short hand = Field.scrollsIn[player, 1]; // Get cards in hand
+			short spaces = (short) (81 - hand * 7); // Subtract card lengths from maximum width
 			if (hand > 1)
-				spaces -= (short) (hand - 1);
-			Console.WriteLine(spaces);
-			spaces = (short) ((spaces - 1) / 2);
-			Console.WriteLine(spaces);
+				spaces -= (short) (hand - 1); // Subtract interval spaces between cards
+			//Console.WriteLine(spaces); // 
+			spaces = (short) ((spaces - 1) / 2); // No idea
+			//Console.WriteLine(spaces);
 			string margin = "";
 			for (short counter = 0; counter < spaces; counter++)
 				margin += " ";
@@ -171,3 +245,8 @@ namespace Board {
 		}
 	}
 }
+/**
+ * CHANGELOG
+ * 2012-01-01 05:35 - Fixed Player 1's Hand by adding GetHandMargin(0).
+ * 2012-01-28 14:42 - 
+ */
