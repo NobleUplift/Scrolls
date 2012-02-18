@@ -105,7 +105,7 @@ namespace Objects
 		/* + 
 		 "Persist Security Info=false;" +
 		 "Initial Catalog=Aztec;" +
-		 "Integrated Security=SSPI;" +
+		 "Integrated Security=SSPI;" + 
 		 "Application Name=Scrolls"*/
 		private SqlCeConnection connection;
 
@@ -126,15 +126,16 @@ namespace Objects
 			try {
 				this.connection.Close();
 			} catch (Exception e) {
-				//Console.WriteLine("Database Connection Could Not Close!");
-				//Console.WriteLine(e.ToString());
+				Console.WriteLine("Database Connection Could Not Close!");
+			    Console.WriteLine(e.ToString());
 			}
 		}
 
 		void IDisposable.Dispose() {
 			try {
 				this.connection.Close();
-			} catch (Exception e) { }
+            }
+            catch (Exception e) { Console.WriteLine(e.ToString()); }
 		}
 
 		public void Make() {
@@ -180,6 +181,9 @@ namespace Objects
 		}
 	}
 
+    /**
+     * Alternative names: Bind, Cell, Unit (2012/01/28 02:29)
+     */
 	public class Scroll : Object {
 		public int id;
 		// 1 for Front Line, 2 for Back Line, 3 for Either, and 4 for Equipment
