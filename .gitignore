@@ -1,0 +1,119 @@
+## Visual Studio / .NET
+
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Bb]uild/
+[Ll]og/
+[Ll]ogs/
+publish/
+*_i.c
+*_p.c
+*_h.h
+*.ilk
+*.meta
+*.obj
+*.iobj
+*.pch
+*.pdb
+*.ipdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+
+# Compiled output
+*.dll
+*.exe
+*.lib
+*.so
+*.dylib
+
+# Visual Studio workspace and cache
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.sln.cache
+*.userprefs
+*.VC.db
+*.VC.VC.opendb
+ipch/
+*.aps
+*.ncb
+*.opendb
+*.opensdf
+*.sdf.lock
+*.cachefile
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# MSBuild / ReSharper / test output
+*.log
+*.binlog
+*.tlog
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# NuGet / packages
+packages/
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+
+# ClickOnce
+*.publishsettings
+PublishScripts/
+
+# OS cruft
+[Tt]humbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+## Project-specific
+
+# The stock Visual Studio ignore list contains *.sdf, intended for SQL Server Data Tools
+# scratch files. This project's card data IS a pair of SQL Server Compact .sdf databases and
+# both are tracked, so *.sdf is deliberately absent above. These two must stay committed:
+!Scrolls/BoosterPacks.sdf
+!Scrolls/Decks.sdf
+
+# Likewise *.user is ignored above, but this project's .csproj.user is tracked on purpose.
+!Scrolls/Scrolls.csproj.user
+
+# Visual Studio 2010 upgrade report. Never commit: it embeds absolute paths from the
+# machine the project was upgraded on.
+UpgradeLog.XML
+UpgradeLog*.XML
+_UpgradeReport_Files/
+
+# Vendor installer kept beside the solution
+SSCERuntime-ENU.exe
