@@ -12,17 +12,31 @@ was reconstructed to match the original development, but no README, no tests, an
 
 ## Build and run
 
-Visual Studio Community 2022 and the .NET SDK are installed, but the in-box .NET Framework MSBuild
-builds this project fine and is the shortest path:
+### Prerequisite: SQL Server Compact 3.5 SP2
+
+The csproj references `System.Data.SqlServerCe, Version=3.5.0.0` with **no `HintPath`**, so it
+resolves only from the GAC. Without SQL CE 3.5 SP2 installed, the build fails with `CS0234` on the
+`using System.Data.SqlServerCe;` at `Objects.cs:12` and `CS0246` on the `SqlCeConnection` field, and
+nothing in the project compiles.
+
+`SSCERuntime-ENU.exe` sits in the repo root on this machine, but `.gitignore:119` excludes it by name,
+so a clone will not have it. Keep a copy somewhere alongside the repo; the download is no longer
+straightforward to find.
+
+### Building
 
 ```powershell
 & "C:\WINDOWS\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe" Scrolls.sln /p:Configuration=Debug /p:Platform=x86
 ```
 
-**The build succeeds.** SQL Server Compact 3.5 SP2 is installed, which puts `System.Data.SqlServerCe`
-3.5.0.0 in the GAC, the exact version the project reference asks for. One warning remains: MSB3245 for
-the `Microsoft.SqlServerCe.Client` reference, whose `HintPath` points at a Visual Studio 9.0 directory
-that no longer exists. Nothing in the project uses that assembly and the warning is harmless.
+Visual Studio Community 2022 and the .NET SDK are also installed, but the in-box .NET Framework
+MSBuild is the shortest path. Build **x86**, not `AnyCPU`: the project sets `PlatformTarget` x86 under
+the x86 configurations, and SQL CE loads bitness-specific native DLLs (`sqlce*35.dll`), so an AnyCPU
+build on 64-bit Windows can load a provider it cannot then initialise.
+
+One warning remains and is harmless: MSB3245 for the `Microsoft.SqlServerCe.Client` reference, whose
+`HintPath` points at a Visual Studio 9.0 directory that no longer exists. Nothing in the project uses
+that assembly.
 
 Redirect build output with `/p:OutputPath=<scratchpad> /p:BaseIntermediateOutputPath=<scratchpad>`
 when you only want to check compilation, so the committed 2010/2012/2014 binaries in `bin\` are left
@@ -32,11 +46,28 @@ Running the app needs a real interactive console. It no longer calls `Console.Se
 does use `Console.KeyAvailable` and cursor positioning, which are meaningless under redirected output.
 Ask the user to run it.
 
-To verify rendering without an interactive console, compile a harness that references the built
-`Scrolls.exe`, calls `AllocConsole`, sizes the console with `Console.SetWindowSize`, calls
-`BasicBoard.Render`, and reads `Board.Screen`'s private `back` buffer by reflection, writing the frame
-to a file. An allocated console is classic conhost, which honours `SetWindowSize`, so arbitrary sizes
-can be exercised this way.
+### Testing
+
+**There is no test project and no test runner.** The only automated verification is a render harness,
+which has to be written each time it is needed; it is not committed. It works like this:
+
+1. Compile a separate exe referencing the built `Scrolls.exe`:
+   ```powershell
+   & "C:\WINDOWS\Microsoft.NET\Framework\v4.0.30319\csc.exe" /target:exe /platform:x86 `
+       /out:<scratch>\Harness.exe /r:<scratch>\Scrolls.exe <scratch>\Harness.cs
+   ```
+2. In `Main`, P/Invoke `AllocConsole` **before touching `System.Console`**. The process has no console
+   when launched from a tool, and an allocated console is classic conhost, which *does* honour
+   `Console.SetWindowSize` where Windows Terminal ignores it. This is what makes arbitrary sizes
+   testable.
+3. Drive `Objects.Field`, `Deck`, and `PlayerCommands` directly, then call `BasicBoard.Render`.
+4. Read `Board.Screen`'s private static `back` buffer by reflection and write the frame to a **file**.
+   Do not print it: stdout goes to the allocated console, not to the captured pipe.
+
+Assert that every row is exactly `Screen.Width` wide. A row of the wrong width is the signature of the
+shearing bug this renderer exists to fix, so that single check catches most layout regressions. Run it
+at 80x25 (compact layout), something tall like 100x50 (full layout), and below the minimum to confirm
+the "too small" notice.
 
 ## Architecture
 
@@ -86,8 +117,9 @@ from those constants.
 The layout has two forms, chosen by available height: a full form with three rows per card
 (abbreviation, type, endurance) and a compact form with one. `Screen.Put` silently drops writes
 outside the buffer, so a layout that overruns a small terminal clips instead of shearing or throwing.
-Below `BasicBoard.MinWidth` x `MinHeight` the renderer draws a "terminal too small" notice instead;
-`MinWidth` is driven by a full hand, which is wider than the board itself.
+Below `BasicBoard.MinWidth` x `MinHeight` (currently **67 x 23**) the renderer draws a "terminal too
+small" notice instead. `MinWidth` is driven by a full eleven-card hand, which is wider than the
+37-column board itself.
 
 `BasicBoard` records the screen rectangle of every slot and hand position as it draws
 (`SlotRect`, `HandRect`, `BattlefieldRect`). Nothing selects cards yet, but combined with
@@ -107,6 +139,31 @@ only the connection is configured there. It is dead weight the data-access code 
 Both `.sdf` files are `Content` with `CopyToOutputDirectory=PreserveNewest`, and the connection string
 uses `|DataDirectory|`, so the database the app reads is the copy in the output folder, not the one in
 the source tree. Editing `Scrolls\BoosterPacks.sdf` only takes effect after a build copies it.
+
+#### Inspecting the databases
+
+No extra tooling is needed once SQL CE is installed; the provider in the GAC is enough:
+
+```powershell
+Copy-Item Scrolls\BoosterPacks.sdf $scratch\   # work on a COPY, see warning below
+Add-Type -AssemblyName "System.Data.SqlServerCe, Version=3.5.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91"
+$c = New-Object System.Data.SqlServerCe.SqlCeConnection("Data Source=$scratch\BoosterPacks.sdf")
+$c.Open()
+$da = New-Object System.Data.SqlServerCe.SqlCeDataAdapter("SELECT * FROM Aztec", $c)
+$t = New-Object System.Data.DataTable; $da.Fill($t) | Out-Null
+$t | Format-Table -AutoSize
+```
+
+**Always query a copy, never the file in the source tree.** Opening a 3.5 `.sdf` with a newer engine
+can silently upgrade its format, and these two files are the only originals.
+
+`INFORMATION_SCHEMA.COLUMNS`, `.INDEXES`, `.KEY_COLUMN_USAGE`, `.TABLE_CONSTRAINTS`, and
+`.PROVIDER_TYPES` are all available, which is enough to reconstruct full DDL if the data ever needs
+exporting. Do not reach for third-party tools such as `ExportSQLCE.exe` for this.
+
+`NOMENCLATURE.md` is the reference for game vocabulary and the full contents of both tables. It
+carries two corrections against its own earlier claims, because it was first compiled by scanning raw
+database pages before the provider was available.
 
 ### `Deck`
 
@@ -145,21 +202,42 @@ yet, so everything runs as player 1.
 Command output goes to `MessageLog`, never to `Console.WriteLine`, otherwise it is overwritten by the
 next frame.
 
-## Files that are not part of the build
+## Deleted history
 
-- `Scrolls\Sandbox.txt` - scratch fragments of the earlier hardcoded board renderer. It references
-  `Field` members that no longer exist (`player1frontLine1`, `player2scrollsInHand`, ...) and is not
-  valid against the current code.
+Three things `NOMENCLATURE.md` and older notes refer to are no longer in the working tree, with
+different consequences:
 
-The `Backup\` and `Scrolls\2010-07-19 Code\` snapshot directories have been deleted and were never
-committed, so they are not recoverable from git. The older one-class-per-deck design they contained
-does survive in history as `Scrolls/Decks.cs`, added in `fa5c874` and removed by `1353043` when the
-parameterized `Deck` class replaced it.
+- `Scrolls\Sandbox.txt` - scratch fragments of the earlier hardcoded board renderer, referencing
+  `Field` members that no longer exist (`player1frontLine1`, `player2scrollsInHand`, ...). **Recoverable**:
+  committed in `d5ec8be`, so `git show d5ec8be:Scrolls/Sandbox.txt` still has it.
+- `Backup\` and `Scrolls\2010-07-19 Code\` - the VS2008 snapshot and the pre-rewrite snapshot.
+  **Not recoverable**: never committed. The older one-class-per-deck design they held does survive
+  separately as `Scrolls/Decks.cs`, added in `fa5c874` and removed by `1353043` when the parameterized
+  `Deck` class replaced it.
+
+Documentation that cites `2010-07-19 Code\` as a source (notably `NOMENCLATURE.md`) is therefore
+citing something that can no longer be re-checked.
 
 ## Conventions in this codebase
 
 - Source files are UTF-8 **with BOM**, and `Board.cs` depends on it: the box-drawing characters are
   non-ASCII, and the C# compiler needs the BOM to read them as UTF-8. Preserve it when editing.
+- **Every `.cs` file uses CRLF line endings.** There is no `.gitattributes` and `core.autocrlf` is
+  `false`, so git stores bytes verbatim: a file written with bare LF differs from its committed form
+  on *every* line, which turns its diff into a whole-file replacement and hides the real change.
+
+  Tools that rewrite a file wholesale tend to emit LF and strip the BOM. After any such rewrite,
+  restore both before building or committing:
+
+  ```powershell
+  $enc = New-Object System.Text.UTF8Encoding($true)   # $true = emit BOM
+  $t = [System.IO.File]::ReadAllText($path)
+  $t = $t.Replace("`r`n","`n").Replace("`n","`r`n")   # normalise first, or CRLF becomes CR CR LF
+  [System.IO.File]::WriteAllText($path, $t, $enc)
+  ```
+
+  To check the whole tree at a glance, count bytes: any `0x0A` not preceded by `0x0D` is a bare LF.
+  Targeted `Edit` calls preserve encoding and endings; only full-file writes need this.
 - Files are indented with tabs, though the later 2012-era edits in `Board.cs` and `Program.cs` mixed
   in spaces. Match the surrounding block.
 - Numeric game state uses `short` deliberately (counts, indices, loop counters), with explicit

@@ -1,0 +1,48 @@
+# Line endings
+#
+# core.autocrlf is false and this repo previously had no .gitattributes, so git
+# stored bytes exactly as written. That made line endings a property of whichever
+# tool last touched a file: anything that rewrote a source file wholesale tended to
+# emit LF, which differs from the committed CRLF form on every single line and turns
+# the diff into a whole-file replacement that hides the real change.
+#
+# Pinning them here makes that impossible regardless of the editor or tool used.
+
+# Let git decide what is text, then pin the ending per type below.
+* text=auto
+
+# The C# sources and the Visual Studio project files are CRLF.
+#
+# Board.cs and Screen.cs also carry non-ASCII box-drawing glyphs and must stay
+# UTF-8 with BOM. Deliberately NOT declared with working-tree-encoding: that
+# attribute is for non-UTF-8 working trees, and pointing it at UTF-8 here would put
+# git in charge of a byte sequence the C# compiler depends on. The BOM stays a
+# manual convention, documented in CLAUDE.md.
+*.cs        text eol=crlf
+*.csproj    text eol=crlf
+*.sln       text eol=crlf
+*.config    text eol=crlf
+*.settings  text eol=crlf
+*.xsd       text eol=crlf
+*.xsc       text eol=crlf
+*.xss       text eol=crlf
+*.user      text eol=crlf
+*.ps1       text eol=crlf
+
+# Documentation is LF, which is how it is already committed.
+*.md          text eol=lf
+.gitignore    text eol=lf
+.gitattributes text eol=lf
+
+# Binary. SQL CE databases in particular must never be line-ending converted;
+# they are the only copies of the card data.
+*.sdf  binary
+*.exe  binary
+*.dll  binary
+*.pdb  binary
+*.cache binary
+*.vsidx binary
+*.suo  binary
+
+# CSV card exports are text but tools disagree on endings; leave them alone.
+*.csv  -text

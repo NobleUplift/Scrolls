@@ -2,9 +2,6 @@
  * Default
  */
 using System;
-//using System.Collections.Generic;
-//using System.Linq;
-//using System.Text;
 
 /**
  * Custom
@@ -25,83 +22,147 @@ using ArtificialIntelligence;
 namespace Scrolls {
 	public class Program
 	{
-		public bool quit = false;
+		public const short DeckSize = 40;
+
+		/**
+		 * The acting player.
+		 *
+		 * There is no turn order yet, so every command runs as player 1. The value
+		 * is threaded through runCommand rather than hardcoded at the call site so
+		 * that adding turns later does not mean revisiting each verb.
+		 */
+		private static short currentPlayer = 0;
 
 		public static void Main(string[] args) {
-			// Setup console window
-			Console.Title = "Scrolls";
-			Console.SetWindowSize(82,52);
+			/*
+			 * No SetWindowSize. Windows Terminal ignores it, which left every frame
+			 * wider than the window and sheared the grid. The renderer reads the
+			 * real window size instead and lays out to whatever it finds.
+			 */
+			Screen.Init("Scrolls");
 
-			// Welcome the user, setup the field, print the board, make the deck, and wait
-            String introduction = "Welcome to Scrolls!";
-            String margin = "";
-            for (int i = 0; i < (81 - introduction.Length) / 2; i++)
-                margin += " ";
-            BasicBoard.title = margin + introduction + margin;
-		    //Console.WriteLine(BasicBoard.title);
-			new Field(40,40);
-			BasicBoard.PrintBoard();
-			int[,] scroll1 = { { 10000000, 1 },
-							   { 10000001, 3 },
-							   { 10000002, 2 },
-							   { 10000003, 3 } };
-			int[,] scroll2 = { { 20000000, 1 },
-							   { 20000001, 2 } };
-			using (Deck player1 = new Deck(scroll1, 40)) {
+			BasicBoard.title = "Welcome to Scrolls!";
+			BasicBoard.status = " draw | place <hand> <slot> | help | quit ";
+
+			new Field(DeckSize, DeckSize);
+
+			/*
+			 * Card ids come from the Aztec table. The original player 2 manifest
+			 * listed the 20000000 range, which has never existed in the shipped
+			 * database, so that deck always loaded empty.
+			 */
+			int[,] scroll1 = { { 10000000,  4 },
+							   { 10000001, 16 },
+							   { 10000002, 12 },
+							   { 10000003,  8 } };
+			int[,] scroll2 = { { 10000000,  2 },
+							   { 10000001, 18 },
+							   { 10000002, 14 },
+							   { 10000003,  6 } };
+
+			using (Deck player1 = new Deck(0, scroll1, DeckSize)) {
 				player1.Make();
 			}
-			using (Deck player2 = new Deck(scroll2, 40)) {
+			using (Deck player2 = new Deck(1, scroll2, DeckSize)) {
 				player2.Make();
 			}
-			Thread.Sleep(1000);
 
-			// Draw the hands and ask for a command
+			MessageLog.Add("Type help for commands.");
+
 			SystemCommands.DrawHand();
 			InputCommand();
-			Console.ReadLine();
+
+			Screen.Shutdown();
 		}
 
-		/* act - shift */
+		/**
+		 * InputCommand
+		 * The command loop: read a key, redraw when something changed, dispatch on
+		 * Enter.
+		 *
+		 * Input is assembled a key at a time rather than through ReadLine because
+		 * ReadLine moves the cursor and echoes on its own, which fights a renderer
+		 * that owns the whole screen. Polling instead of blocking also lets the
+		 * board re-lay out when the window is resized mid-game.
+		 */
 		public static void InputCommand() {
-			string newCommand = Console.ReadLine();
-			do {
-				// Check to make sure the command is valid
-				bool validCommand = false;
-				foreach (string command in PlayerCommands.allCommands)
-					if (command == newCommand)
-						validCommand = true;
+			string input = "";
+			bool quit = false;
+			bool dirty = true;
 
-				// If command is valid, run it and refresh the board, otherwise 
-				if (validCommand == true) {
-					PlayerCommands.runCommand(newCommand);
-					Console.Clear();
-					BasicBoard.PrintBoard();
-					newCommand = Console.ReadLine();
-				} else {
-					if (newCommand == "") {
-						PlayerCommands.help(false);
-						newCommand = Console.ReadLine();
-						Console.Clear();
-						BasicBoard.PrintBoard();
-					} else if (newCommand == "help") {
-						PlayerCommands.help(true);
-						newCommand = Console.ReadLine();
-						Console.Clear();
-						BasicBoard.PrintBoard();
-					} else if (newCommand == "quit") {
-					} else {
-						Console.WriteLine(newCommand + " is not a valid command!");
-						newCommand = Console.ReadLine();
-						Console.Clear();
-						BasicBoard.PrintBoard();
-					}
+			while (!quit) {
+				if (dirty) {
+					BasicBoard.Render(input);
+					dirty = false;
 				}
-			} while (newCommand != "quit");
+
+				if (!KeyWaiting()) {
+					// Nothing typed: check whether the window changed shape, then idle
+					if (Screen.EnsureSize())
+						dirty = true;
+					Thread.Sleep(30);
+					continue;
+				}
+
+				ConsoleKeyInfo key;
+				try {
+					key = Console.ReadKey(true);
+				} catch (Exception) {
+					return; // No usable console; nothing more this loop can do
+				}
+
+				/*
+				 * At a size too small to draw the board there is no visible prompt,
+				 * so the notice offers a bare Q instead of a typed command.
+				 */
+				if (BasicBoard.TooSmall) {
+					if (key.Key == ConsoleKey.Q)
+						return;
+					dirty = true;
+					continue;
+				}
+
+				switch (key.Key) {
+					case ConsoleKey.Enter:
+						quit = PlayerCommands.runCommand(currentPlayer, input);
+						input = "";
+						dirty = true;
+						break;
+
+					case ConsoleKey.Backspace:
+						if (input.Length > 0) {
+							input = input.Substring(0, input.Length - 1);
+							dirty = true;
+						}
+						break;
+
+					case ConsoleKey.Escape:
+						if (input.Length > 0) {
+							input = "";
+							dirty = true;
+						}
+						break;
+
+					default:
+						if (!Char.IsControl(key.KeyChar)) {
+							input += key.KeyChar;
+							dirty = true;
+						}
+						break;
+				}
+			}
+		}
+
+		/**
+		 * KeyWaiting
+		 * Whether a keystroke is pending, false when there is no console to ask.
+		 */
+		private static bool KeyWaiting() {
+			try {
+				return Console.KeyAvailable;
+			} catch (Exception) {
+				return false;
+			}
 		}
 	}
 }
-/**
- * CHANGELOG
- * 2010-07-19T08:11 - Saved code for complete rewrite
- * 
- */

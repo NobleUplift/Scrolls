@@ -2,9 +2,6 @@
  * Default
  */
 using System;
-//using System.Collections.Generic;
-//using System.Linq;
-//using System.Text;
 
 /**
  * Custom
@@ -21,232 +18,465 @@ using Board;
 using ArtificialIntelligence;
 
 namespace Board {
+	/**
+	 * MessageLog
+	 * A bounded scrollback of command output.
+	 *
+	 * The board is repainted constantly, so anything written straight to the
+	 * console is destroyed before it can be read. Messages go here instead and are
+	 * drawn into their own region of every frame.
+	 */
+	public class MessageLog {
+		private const int Capacity = 200;
+		private static ArrayList lines = new ArrayList();
+
+		public static void Add(string text) {
+			if (text == null)
+				text = "";
+			lines.Add(text);
+			while (lines.Count > Capacity)
+				lines.RemoveAt(0);
+		}
+
+		public static int Count {
+			get { return lines.Count; }
+		}
+
+		/**
+		 * Tail
+		 * The last count messages, oldest first, for drawing into a region of
+		 * fixed height.
+		 */
+		public static string[] Tail(int count) {
+			if (count < 0)
+				count = 0;
+			int take = Math.Min(count, lines.Count);
+			string[] result = new string[take];
+			for (int i = 0; i < take; i++)
+				result[i] = (string) lines[lines.Count - take + i];
+			return result;
+		}
+	}
+
+	/**
+	 * BasicBoard
+	 * Composes the battlefield into the Screen back buffer.
+	 *
+	 * Every width here derives from SlotInterior and Slots rather than being a
+	 * hand-tuned literal, because the previous renderer's field rows and hand rows
+	 * disagreed by one column and sheared the grid.
+	 */
 	public class BasicBoard {
-        public static String title = "";
+		public const int Slots = 6;
+		public const int Lines = 3;
+		public const int SlotInterior = 5;
 
-		public static void PrintBoard() {
-            Console.WriteLine(title);
-			short[] two = GetDeckCount(Field.scrollsIn[1, 0]);
-			short[] one = GetDeckCount(Field.scrollsIn[0, 0]);
+		// 1 leading rule, then each slot contributes its interior plus one trailing rule
+		public const int BoardWidth = 1 + Slots * (SlotInterior + 1); // 37
 
-            string margin = "                      ";
-            string top = "┌─────╥─────╥─────╥─────╥─────╥─────┐";
-            string bars = "││   │║│   │║│   │║│   │║│   │║│   ││";
-            string types = "│     ║     ║     ║     ║     ║     │";
-            string names = "│     ║     ║     ║     ║     ║     │";
-            //string types  = "│";
-            //string names  = "│";
-            string middle = "╞═════╬═════╬═════╬═════╬═════╬═════╡";
-            string bottom = "└─────╨─────╨─────╨─────╨─────╨─────┘";
-            string midtop = "┌─────╖                       ╓─────┐";
-            string mid2up = "│     ╟───────────╥───────────╢     │";
-            string midone = "│     ║    " + two[0] + "      ║    " + one[0] + "      ║     │";
-            string midtwo = "│     ║      " + two[1] + "    ║      " + one[1] + "    ║     │";
-            string mid2dn = "│     ╟───────────╨───────────╢     │";
-            string midbot = "└─────╜                       ╙─────┘";
+		public const int MaxHand = 11;
 
-            string handTop = "┌─────┐";
-            string handMid = "│     │";
-            string handBot = "└─────┘";
+		// Heights of each band, in full and compact form
+		private const int FullLineRows = 3;
+		private const int CompactLineRows = 1;
+		private const int FullFieldRows = 1 + Lines * FullLineRows + (Lines - 1) + 1;       // 13
+		private const int CompactFieldRows = 1 + Lines * CompactLineRows + (Lines - 1) + 1; //  7
+		private const int FullMiddleRows = 6;
+		private const int CompactMiddleRows = 3;
+		private const int FullHandRows = 3;
+		private const int CompactHandRows = 1;
 
-			/*string margin = "                      ";
-			string top    = "┌─────┬─────┬─────┬─────┬─────┬─────┐";
-			string bars   = "│     │     │     │     │     │     │";
-            string types  = "│     │     │     │     │     │     │";
-            string names  = "│     │     │     │     │     │     │";
-			//string types  = "│";
-			//string names  = "│";
-			string middle = "├─────┼─────┼─────┼─────┼─────┼─────│";
-			string bottom = "└─────┴─────┴─────┴─────┴─────┴─────┘";
-			string midtop = "┌─────┐                       ┌─────┐";
-			string mid2up = "│     ├───────────┬───────────┤     │";
-			string midone = "│     │    " + two[0] + "      │    " + one[0] + "      │     │";
-			string midtwo = "│     │      " + two[1] + "    │      " + one[1] + "    │     │";
-			string mid2dn = "│     ├───────────┴───────────┤     │";
-			string midbot = "└─────┘                       └─────┘";
-			
-			string handTop = "┌─────┐";
-			string handMid = "│     │";
-			string handBot = "└─────┘";*/
+		private const int FullTotal = 1 + FullHandRows + FullFieldRows + FullMiddleRows + FullFieldRows + FullHandRows;
+		private const int CompactTotal = 1 + CompactHandRows + CompactFieldRows + CompactMiddleRows + CompactFieldRows + CompactHandRows;
 
-            /*
-             * Print Player 2's Hand
-             */
-            string handMargin = GetHandMargin(1);
-			String[] handLines = new String[6];
+		/*
+		 * A full hand laid out compactly is wider than the board itself, so the
+		 * minimum width is driven by the hand, not by the field. Below this the
+		 * hand would be clipped at both ends and a player could not see what they
+		 * were holding.
+		 */
+		private const int WidestRow = MaxHand * (SlotInterior + 1) - 1; // 65
+		public const int MinWidth = WidestRow + 2;
+		public const int MinHeight = CompactTotal + 3;
 
-			short handNum = Field.scrollsIn[1, 1];
-			// Initialize Stings for 
-			for (short counter = 0; counter < handLines.Length; counter++)
-				handLines[counter] = "";
+		public static string title = "";
+		public static string status = "";
 
-			for (short counter = 0; counter < handNum; counter++) {
-				handLines[0] += handTop;
-				handLines[1] += handMid;
-				handLines[2] += handBot;
-				if (counter != handNum - 1) {
-					handLines[0] += " ";
-					handLines[1] += " ";
-					handLines[2] += " ";
+		private static ConsoleColor Fg = Screen.DefaultFg;
+		private static ConsoleColor Bg = Screen.DefaultBg;
+		private static ConsoleColor Rule = ConsoleColor.DarkGray;
+		private static ConsoleColor Card = ConsoleColor.White;
+		private static ConsoleColor Dim = ConsoleColor.DarkGray;
+
+		/**
+		 * Slot and hand rectangles from the most recent frame.
+		 *
+		 * Nothing selects a card yet, but the renderer is the only thing that knows
+		 * where a slot landed on screen. Recording it here means a later cursor can
+		 * highlight a slot through Screen.Recolour without the layout maths being
+		 * duplicated or the board being redrawn a second way.
+		 */
+		private static Rect[, ,] slotRects = new Rect[2, Lines, Slots];
+		private static Rect[,] handRects = new Rect[2, MaxHand];
+		private static Rect[] battlefieldRects = new Rect[2];
+
+		public static Rect SlotRect(int player, int line, int slot) {
+			return slotRects[player, line, slot];
+		}
+
+		public static Rect HandRect(int player, int index) {
+			return handRects[player, index];
+		}
+
+		public static Rect BattlefieldRect(int player) {
+			return battlefieldRects[player];
+		}
+
+		private static bool tooSmall;
+		private static int promptRow;
+		private static int promptColumn;
+
+		/**
+		 * TooSmall
+		 * Whether the last frame was the "resize me" notice rather than a board.
+		 * The input loop uses this to accept a bare Q, since no prompt is visible.
+		 */
+		public static bool TooSmall { get { return tooSmall; } }
+
+		public static int PromptRow { get { return promptRow; } }
+		public static int PromptColumn { get { return promptColumn; } }
+
+		/**
+		 * Render
+		 * Draws one complete frame and pushes it to the terminal.
+		 *
+		 * @param input The text the player has typed so far, shown at the prompt
+		 */
+		public static void Render(string input) {
+			Screen.EnsureSize();
+			Screen.Clear();
+
+			tooSmall = Screen.Width < MinWidth || Screen.Height < MinHeight;
+			if (tooSmall) {
+				DrawTooSmall();
+				Screen.Flush();
+				return;
+			}
+
+			bool full = Screen.Height >= FullTotal + 3;
+			int left = (Screen.Width - BoardWidth) / 2;
+
+			int fieldRows = full ? FullFieldRows : CompactFieldRows;
+			int middleRows = full ? FullMiddleRows : CompactMiddleRows;
+			int handRows = full ? FullHandRows : CompactHandRows;
+
+			int y = 0;
+			Screen.WriteCentred(y, title, ConsoleColor.Yellow, Bg);
+			y += 1;
+
+			DrawHand(1, left, y, handRows);
+			y += handRows;
+
+			DrawField(1, left, y, full);
+			y += fieldRows;
+
+			DrawMiddle(left, y, full);
+			y += middleRows;
+
+			DrawField(0, left, y, full);
+			y += fieldRows;
+
+			DrawHand(0, left, y, handRows);
+			y += handRows;
+
+			// Whatever is left over becomes scrollback, with the last two rows reserved
+			promptRow = Screen.Height - 1;
+			int statusRow = Screen.Height - 2;
+			int logTop = y;
+			int logRows = statusRow - logTop;
+
+			DrawLog(logTop, logRows);
+			DrawStatus(statusRow);
+			DrawPrompt(promptRow, input);
+
+			Screen.Flush();
+			Screen.PlaceCursor(promptColumn, promptRow, true);
+		}
+
+		private static void DrawTooSmall() {
+			string[] message = {
+				"Terminal too small.",
+				"",
+				"Needs at least " + MinWidth + " x " + MinHeight + ".",
+				"This window is " + Screen.Width + " x " + Screen.Height + ".",
+				"",
+				"Resize the window, or press Q to quit."
+			};
+			// The prompt is not drawn at this size, so Q is handled directly by the input loop
+			int top = Math.Max(0, (Screen.Height - message.Length) / 2);
+			for (int i = 0; i < message.Length; i++)
+				Screen.WriteCentred(top + i, message[i], ConsoleColor.Red, Bg);
+		}
+
+		/**
+		 * DrawField
+		 * One player's three lines of six slots.
+		 */
+		private static void DrawField(int player, int left, int top, bool full) {
+			int y = top;
+			Screen.Write(left, y, Rule6('┌', '─', '╥', '┐'), Rule, Bg);
+			y++;
+
+			/*
+			 * Player 1 reads bottom-up so that the line nearest the middle of the
+			 * screen is the front line for both players.
+			 */
+			for (int step = 0; step < Lines; step++) {
+				int line = (player == 1) ? (Lines - 1 - step) : step;
+
+				if (full) {
+					DrawSlotRow(player, line, left, y, SlotField.Name);
+					DrawSlotRow(player, line, left, y + 1, SlotField.Type);
+					DrawSlotRow(player, line, left, y + 2, SlotField.Endurance);
+					for (int slot = 0; slot < Slots; slot++)
+						slotRects[player, line, slot] = new Rect(SlotX(left, slot), y, SlotInterior, FullLineRows);
+					y += FullLineRows;
+				} else {
+					DrawSlotRow(player, line, left, y, SlotField.Name);
+					for (int slot = 0; slot < Slots; slot++)
+						slotRects[player, line, slot] = new Rect(SlotX(left, slot), y, SlotInterior, CompactLineRows);
+					y += CompactLineRows;
+				}
+
+				if (step != Lines - 1) {
+					Screen.Write(left, y, Rule6('╞', '═', '╬', '╡'), Rule, Bg);
+					y++;
 				}
 			}
 
-			WriteMargin(handMargin, handLines[0]);
-			for (short counter = 0; counter < 3; counter++)
-				WriteMargin(handMargin, handLines[1]);
-            WriteMargin(handMargin, handLines[2]);
-            Console.WriteLine(); 
+			Screen.Write(left, y, Rule6('└', '─', '╨', '┘'), Rule, Bg);
+		}
 
-            /*
-             * Print Player 2's Battlefield
-             */
-			WriteMargin(margin, top);
-			for (short line = 2; line > -1; line--) {
-				//WriteMargin(margin, bars); 
-				//for (short scroll = 0; scroll < 6; scroll++)
-				//	types += Field.playerLines[1, line, scroll].typeAbb + "│";
-                types = "│┌───┐║┌───┐║┌───┐║┌───┐║┌───┐║┌───┐│";
-				WriteMargin(margin, types);
-				//types = "│";
+		private enum SlotField { Name, Type, Endurance }
 
-                WriteMargin(margin, bars); 
-
-				//for (short scroll = 0; scroll < 6; scroll++)
-				//	names += Field.playerLines[1, line, scroll].nameAbb + "│";
-                names = "│└───┘║└───┘║└───┘║└───┘║└───┘║└───┘│";
-				WriteMargin(margin, names);
-				//names = "│";
-
-				if (line != 0)
-					WriteMargin(margin, middle);
+		/**
+		 * DrawSlotRow
+		 * One horizontal strip across all six slots of a line.
+		 */
+		private static void DrawSlotRow(int player, int line, int left, int y, SlotField which) {
+			Screen.Put(left, y, '│', Rule, Bg);
+			for (int slot = 0; slot < Slots; slot++) {
+				Scroll scroll = Field.playerLines[player, line, slot];
+				string text = SlotText(scroll, which);
+				Screen.Write(SlotX(left, slot), y, Fit(text), IsEmpty(scroll) ? Dim : Card, Bg);
+				Screen.Put(SlotX(left, slot) + SlotInterior, y, slot == Slots - 1 ? '│' : '║', Rule, Bg);
 			}
-            WriteMargin(margin, bottom);
-            Console.WriteLine();
+		}
 
-			// Write the middle section of the field
-			WriteMargin(margin, midtop);
-			WriteMargin(margin, mid2up);
-			WriteMargin(margin, midone);
-			WriteMargin(margin, midtwo);
-			WriteMargin(margin, mid2dn);
-			WriteMargin(margin, midbot);
-			Console.WriteLine();
-
-            /*
-             * Print Player 1's field
-             */
-			WriteMargin(margin, top);
-			for (short line = 2; line > -1; line--) {
-				//for (short scroll = 0; scroll < 6; scroll++)
-				//	names += Field.playerLines[0, line, scroll].nameAbb + "│";
-                names = "│┌───┐║┌───┐║┌───┐║┌───┐║┌───┐║┌───┐│";
-				WriteMargin(margin, names);
-				//names = "│";
-
-                WriteMargin(margin, bars); 
-
-				//for (short scroll = 0; scroll < 6; scroll++)
-				//	types += Field.playerLines[0, line, scroll].typeAbb + "│";
-                types = "│└───┘║└───┘║└───┘║└───┘║└───┘║└───┘│";
-                WriteMargin(margin, types);
-				//types = "│";
-				//WriteMargin(margin, bars);
-				
-				if (line != 0)
-					WriteMargin(margin, middle);
+		private static string SlotText(Scroll scroll, SlotField which) {
+			if (IsEmpty(scroll))
+				return "";
+			switch (which) {
+				case SlotField.Name:
+					return scroll.nameAbb;
+				case SlotField.Type:
+					return scroll.typeAbb;
+				case SlotField.Endurance:
+					return scroll.endurance.ToString();
+				default:
+					return "";
 			}
-			WriteMargin(margin, bottom);
+		}
 
-            /*
-             * Print Player 1's hand
-             */
-            // COPYPASTA
-            handMargin = GetHandMargin(0);
-
-            handLines = new String[6];
-
-            handNum = Field.scrollsIn[0, 1];
-            // Initialize Stings for handLines
-            for (short counter = 0; counter < handLines.Length; counter++)
-                handLines[counter] = "";
-
-            for (short counter = 0; counter < handNum; counter++)
-            {
-                handLines[0] += handTop;
-                handLines[1] += handMid;
-                handLines[2] += handBot;
-                if (counter != handNum - 1) // If counter is not 0, i.e. one scroll in hand
-                {
-                    handLines[0] += " ";
-                    handLines[1] += " ";
-                    handLines[2] += " ";
-                }
-            }
-
-            WriteMargin(handMargin, handLines[0]);
-            for (short counter = 0; counter < 3; counter++)
-                WriteMargin(handMargin, handLines[1]);
-            WriteMargin(handMargin, handLines[2]);
+		private static bool IsEmpty(Scroll scroll) {
+			return scroll == null || scroll.id == 0;
 		}
 
 		/**
-		 * GetDeckCount
-		 * Converts 
-		 * 
-		 * @param  scrollsInDeck
-		 * @return An array of 0:tens,1:ones
+		 * SlotX
+		 * Left edge of a slot's interior, counted from the board's left rule.
 		 */
-		private static short[] GetDeckCount(short scrollsInDeck) {
-			short tens;
-			short ones;
-			if (scrollsInDeck != 0) {
-				tens = (short) (scrollsInDeck / 10); // Divide by 10 and automatically round with cast
-				if (tens != 0)
-					ones = (short) (scrollsInDeck % (tens * 10)); // Divide 
-				else
-					ones = scrollsInDeck;
+		private static int SlotX(int left, int slot) {
+			return left + 1 + slot * (SlotInterior + 1);
+		}
+
+		/**
+		 * Rule6
+		 * A full-width horizontal rule with a junction between each pair of slots.
+		 */
+		private static string Rule6(char start, char fill, char junction, char end) {
+			string result = start.ToString();
+			for (int slot = 0; slot < Slots; slot++) {
+				result += new string(fill, SlotInterior);
+				result += (slot == Slots - 1) ? end : junction;
+			}
+			return result;
+		}
+
+		/**
+		 * DrawMiddle
+		 * The band between the two fields: each player's battlefield scroll on the
+		 * outside, their deck and void counts on the inside.
+		 */
+		private static void DrawMiddle(int left, int top, bool full) {
+			int inner = BoardWidth - 2 * (SlotInterior + 2); // 23
+			int half = (inner - 1) / 2;                      // 11
+			int leftBoxX = left + 1;
+			int rightBoxX = left + BoardWidth - SlotInterior - 1;
+			int centreX = left + SlotInterior + 2;
+
+			if (full) {
+				Screen.Write(left, top, "┌" + new string('─', SlotInterior) + "╖" + new string(' ', inner) + "╓" + new string('─', SlotInterior) + "┐", Rule, Bg);
+				Screen.Write(left, top + 1, "│" + new string(' ', SlotInterior) + "╟" + new string('─', half) + "╥" + new string('─', half) + "╢" + new string(' ', SlotInterior) + "│", Rule, Bg);
+				Screen.Write(left, top + 2, "│" + new string(' ', SlotInterior) + "║" + new string(' ', half) + "║" + new string(' ', half) + "║" + new string(' ', SlotInterior) + "│", Rule, Bg);
+				Screen.Write(left, top + 3, "│" + new string(' ', SlotInterior) + "║" + new string(' ', half) + "║" + new string(' ', half) + "║" + new string(' ', SlotInterior) + "│", Rule, Bg);
+				Screen.Write(left, top + 4, "│" + new string(' ', SlotInterior) + "╟" + new string('─', half) + "╨" + new string('─', half) + "╢" + new string(' ', SlotInterior) + "│", Rule, Bg);
+				Screen.Write(left, top + 5, "└" + new string('─', SlotInterior) + "╜" + new string(' ', inner) + "╙" + new string('─', SlotInterior) + "┘", Rule, Bg);
+
+				DrawCount(centreX + 1, top + 2, half - 2, "Deck", Field.scrollsIn[1, 0]);
+				DrawCount(centreX + 1, top + 3, half - 2, "Void", Field.scrollsIn[1, 2]);
+				DrawCount(centreX + half + 2, top + 2, half - 2, "Deck", Field.scrollsIn[0, 0]);
+				DrawCount(centreX + half + 2, top + 3, half - 2, "Void", Field.scrollsIn[0, 2]);
+
+				battlefieldRects[1] = new Rect(leftBoxX, top + 1, SlotInterior, 4);
+				battlefieldRects[0] = new Rect(rightBoxX, top + 1, SlotInterior, 4);
+				DrawBattlefield(1, leftBoxX, top + 2);
+				DrawBattlefield(0, rightBoxX, top + 2);
 			} else {
-				tens = 0;
-				ones = 0;
+				Screen.Write(left, top, "┌" + new string('─', SlotInterior) + "╥" + new string('─', half) + "╥" + new string('─', half) + "╥" + new string('─', SlotInterior) + "┐", Rule, Bg);
+				Screen.Write(left, top + 1, "│" + new string(' ', SlotInterior) + "║" + new string(' ', half) + "║" + new string(' ', half) + "║" + new string(' ', SlotInterior) + "│", Rule, Bg);
+				Screen.Write(left, top + 2, "└" + new string('─', SlotInterior) + "╨" + new string('─', half) + "╨" + new string('─', half) + "╨" + new string('─', SlotInterior) + "┘", Rule, Bg);
+
+				DrawCount(centreX + 1, top + 1, half - 2, "Deck", Field.scrollsIn[1, 0]);
+				DrawCount(centreX + half + 2, top + 1, half - 2, "Deck", Field.scrollsIn[0, 0]);
+
+				battlefieldRects[1] = new Rect(leftBoxX, top + 1, SlotInterior, 1);
+				battlefieldRects[0] = new Rect(rightBoxX, top + 1, SlotInterior, 1);
+				DrawBattlefield(1, leftBoxX, top + 1);
+				DrawBattlefield(0, rightBoxX, top + 1);
 			}
-			short[] returnArray = {tens,ones}; // Create the array of tens and ones
-			return returnArray;
+		}
+
+		private static void DrawBattlefield(int player, int x, int y) {
+			Scroll scroll = Field.battlefields[player];
+			Screen.Write(x, y, Fit(IsEmpty(scroll) ? "" : scroll.nameAbb), IsEmpty(scroll) ? Dim : Card, Bg);
 		}
 
 		/**
-		 * GetHandMargin
-		 * 
-		 * 
-		 * @param  player  
-		 * @return        
+		 * DrawCount
+		 * A labelled number, label left and value right within the given width.
+		 *
+		 * The old renderer split counts into tens and ones and placed each digit by
+		 * hand, which broke the row width as soon as a count went negative or above
+		 * ninety-nine. Formatting into a fixed field cannot do that.
 		 */
-		private static string GetHandMargin(short player) {
-			short hand = Field.scrollsIn[player, 1]; // Get cards in hand
-			short spaces = (short) (81 - hand * 7); // Subtract card lengths from maximum width
-			if (hand > 1)
-				spaces -= (short) (hand - 1); // Subtract interval spaces between cards
-			//Console.WriteLine(spaces); // 
-			spaces = (short) ((spaces - 1) / 2); // No idea
-			//Console.WriteLine(spaces);
-			string margin = "";
-			for (short counter = 0; counter < spaces; counter++)
-				margin += " ";
-			return margin;
+		private static void DrawCount(int x, int y, int width, string label, short value) {
+			string text = value.ToString();
+			Screen.Write(x, y, label, Dim, Bg);
+			Screen.Write(x + width - text.Length, y, text, Card, Bg);
 		}
 
 		/**
-		 * Prints a line with margins on both sides
-		 * 
-		 * @param margin   The margin variable
-		 * @param variable The string to print
+		 * DrawHand
+		 * A player's hand, as boxed cards when there is room and as a plain row of
+		 * abbreviations when there is not.
 		 */
-		private static void WriteMargin(string margin,string variable) {
-			Console.WriteLine(margin + variable + margin);
+		private static void DrawHand(int player, int left, int top, int rows) {
+			int hand = Field.scrollsIn[player, 1];
+			if (hand < 0)
+				hand = 0;
+			if (hand > MaxHand)
+				hand = MaxHand;
+
+			ArrayList held = Field.scrollLists[player, 1];
+
+			if (rows >= FullHandRows) {
+				int cardWidth = SlotInterior + 2; // a box around the interior
+				int span = hand * cardWidth + Math.Max(0, hand - 1);
+				if (span <= Screen.Width) {
+					int x = (Screen.Width - span) / 2;
+					for (int i = 0; i < hand; i++) {
+						int cx = x + i * (cardWidth + 1);
+						Screen.Write(cx, top, "┌" + new string('─', SlotInterior) + "┐", Rule, Bg);
+						Screen.Write(cx, top + 1, "│", Rule, Bg);
+						Screen.Write(cx + 1, top + 1, Fit(HandName(held, i)), Card, Bg);
+						Screen.Write(cx + SlotInterior + 1, top + 1, "│", Rule, Bg);
+						Screen.Write(cx, top + 2, "└" + new string('─', SlotInterior) + "┘", Rule, Bg);
+						handRects[player, i] = new Rect(cx + 1, top, SlotInterior, FullHandRows);
+					}
+					return;
+				}
+			}
+
+			// Compact: one row of abbreviations, centred
+			int compactWidth = SlotInterior + 1;
+			int compactSpan = Math.Max(0, hand * compactWidth - 1);
+			int startX = (Screen.Width - compactSpan) / 2;
+			int row = top + rows - 1;
+			for (int i = 0; i < hand; i++) {
+				int cx = startX + i * compactWidth;
+				Screen.Write(cx, row, Fit(HandName(held, i)), Card, Bg);
+				handRects[player, i] = new Rect(cx, row, SlotInterior, 1);
+			}
+		}
+
+		private static string HandName(ArrayList held, int index) {
+			if (held == null || index >= held.Count)
+				return "?";
+			Scroll scroll = (Scroll) held[index];
+			return scroll == null ? "?" : scroll.nameAbb;
+		}
+
+		/**
+		 * DrawLog
+		 * The scrollback region. This is the part that makes the board readable:
+		 * command output survives the next repaint instead of being cleared away.
+		 */
+		private static void DrawLog(int top, int rows) {
+			if (rows <= 0)
+				return;
+			Screen.Write(0, top, new string('─', Screen.Width), Rule, Bg);
+			int textRows = rows - 1;
+			if (textRows <= 0)
+				return;
+			string[] tail = MessageLog.Tail(textRows);
+			for (int i = 0; i < tail.Length; i++)
+				Screen.Write(1, top + 1 + i, Clip(tail[i], Screen.Width - 2), Fg, Bg);
+		}
+
+		private static void DrawStatus(int row) {
+			Screen.Write(0, row, Clip(status, Screen.Width), ConsoleColor.DarkCyan, Bg);
+		}
+
+		private static void DrawPrompt(int row, string input) {
+			string prefix = "> ";
+			Screen.Write(0, row, prefix, ConsoleColor.Green, Bg);
+			string shown = input == null ? "" : input;
+			int room = Screen.Width - prefix.Length - 1;
+			if (shown.Length > room)
+				shown = shown.Substring(shown.Length - room);
+			Screen.Write(prefix.Length, row, shown, Fg, Bg);
+			promptColumn = prefix.Length + shown.Length;
+		}
+
+		/**
+		 * Fit
+		 * Pads or truncates to the slot interior.
+		 *
+		 * The abbreviation columns are nvarchar(4) but empty slots defaulted to five
+		 * spaces, so filled and empty cells were different widths. Forcing every
+		 * value through here means no card can widen a row.
+		 */
+		private static string Fit(string text) {
+			return Clip(text == null ? "" : text, SlotInterior).PadRight(SlotInterior);
+		}
+
+		private static string Clip(string text, int width) {
+			if (text == null)
+				return "";
+			if (width <= 0)
+				return "";
+			return text.Length > width ? text.Substring(0, width) : text;
 		}
 	}
 }
-/**
- * CHANGELOG
- * 2012-01-01 05:35 - Fixed Player 1's Hand by adding GetHandMargin(0).
- * 2012-01-28 14:42 - 
- */
