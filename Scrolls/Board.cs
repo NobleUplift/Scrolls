@@ -65,6 +65,11 @@ namespace Board {
 	 * Every width here derives from SlotInterior and Slots rather than being a
 	 * hand-tuned literal, because the previous renderer's field rows and hand rows
 	 * disagreed by one column and sheared the grid.
+	 *
+	 * The whole board is drawn in single rules. Double rules are reserved, board
+	 * wide, to mean "selected": the grid used to divide its own slots with ║ and ═,
+	 * which left the renderer no heavier weight to mark a cursor with. Anything that
+	 * adds a permanent double line here takes that vocabulary back again.
 	 */
 	public class BasicBoard {
 		public const int Slots = 6;
@@ -108,6 +113,14 @@ namespace Board {
 		private static ConsoleColor Card = ConsoleColor.White;
 		private static ConsoleColor Dim = ConsoleColor.DarkGray;
 
+		/*
+		 * The cursor and the choice it has already made are both drawn as double
+		 * rules, so they need to be told apart by colour: the live one is bright,
+		 * the settled one behind it is not.
+		 */
+		private static ConsoleColor Cursor = ConsoleColor.Yellow;
+		private static ConsoleColor Chosen = ConsoleColor.DarkYellow;
+
 		/**
 		 * Slot and hand rectangles from the most recent frame.
 		 *
@@ -119,6 +132,13 @@ namespace Board {
 		private static Rect[, ,] slotRects = new Rect[2, Lines, Slots];
 		private static Rect[,] handRects = new Rect[2, MaxHand];
 		private static Rect[] battlefieldRects = new Rect[2];
+
+		/*
+		 * Whether the last frame drew each hand as boxes or as a bare row. A boxed
+		 * card has rules to promote to double lines; a bare one has only the gap
+		 * either side of it.
+		 */
+		private static bool[] handBoxed = new bool[2];
 
 		public static Rect SlotRect(int player, int line, int slot) {
 			return slotRects[player, line, slot];
@@ -189,6 +209,14 @@ namespace Board {
 			DrawHand(0, left, y, handRows);
 			y += handRows;
 
+			/*
+			 * Last, because it overwrites rules the bands have already drawn and
+			 * needs every rect of this frame to be recorded. It must also happen
+			 * before the Flush below, which is why no caller outside this method
+			 * could do it.
+			 */
+			DrawSelection();
+
 			// Whatever is left over becomes scrollback, with the last two rows reserved
 			promptRow = Screen.Height - 1;
 			int statusRow = Screen.Height - 2;
@@ -224,7 +252,7 @@ namespace Board {
 		 */
 		private static void DrawField(int player, int left, int top, bool full) {
 			int y = top;
-			Screen.Write(left, y, Rule6('┌', '─', '╥', '┐'), Rule, Bg);
+			Screen.Write(left, y, Rule6('┌', '─', '┬', '┐'), Rule, Bg);
 			y++;
 
 			/*
@@ -249,12 +277,12 @@ namespace Board {
 				}
 
 				if (step != Lines - 1) {
-					Screen.Write(left, y, Rule6('╞', '═', '╬', '╡'), Rule, Bg);
+					Screen.Write(left, y, Rule6('├', '─', '┼', '┤'), Rule, Bg);
 					y++;
 				}
 			}
 
-			Screen.Write(left, y, Rule6('└', '─', '╨', '┘'), Rule, Bg);
+			Screen.Write(left, y, Rule6('└', '─', '┴', '┘'), Rule, Bg);
 		}
 
 		private enum SlotField { Name, Type, Endurance }
@@ -269,7 +297,7 @@ namespace Board {
 				Scroll scroll = Field.playerLines[player, line, slot];
 				string text = SlotText(scroll, which);
 				Screen.Write(SlotX(left, slot), y, Fit(text), IsEmpty(scroll) ? Dim : Card, Bg);
-				Screen.Put(SlotX(left, slot) + SlotInterior, y, slot == Slots - 1 ? '│' : '║', Rule, Bg);
+				Screen.Put(SlotX(left, slot) + SlotInterior, y, '│', Rule, Bg);
 			}
 		}
 
@@ -326,12 +354,12 @@ namespace Board {
 			int centreX = left + SlotInterior + 2;
 
 			if (full) {
-				Screen.Write(left, top, "┌" + new string('─', SlotInterior) + "╖" + new string(' ', inner) + "╓" + new string('─', SlotInterior) + "┐", Rule, Bg);
-				Screen.Write(left, top + 1, "│" + new string(' ', SlotInterior) + "╟" + new string('─', half) + "╥" + new string('─', half) + "╢" + new string(' ', SlotInterior) + "│", Rule, Bg);
-				Screen.Write(left, top + 2, "│" + new string(' ', SlotInterior) + "║" + new string(' ', half) + "║" + new string(' ', half) + "║" + new string(' ', SlotInterior) + "│", Rule, Bg);
-				Screen.Write(left, top + 3, "│" + new string(' ', SlotInterior) + "║" + new string(' ', half) + "║" + new string(' ', half) + "║" + new string(' ', SlotInterior) + "│", Rule, Bg);
-				Screen.Write(left, top + 4, "│" + new string(' ', SlotInterior) + "╟" + new string('─', half) + "╨" + new string('─', half) + "╢" + new string(' ', SlotInterior) + "│", Rule, Bg);
-				Screen.Write(left, top + 5, "└" + new string('─', SlotInterior) + "╜" + new string(' ', inner) + "╙" + new string('─', SlotInterior) + "┘", Rule, Bg);
+				Screen.Write(left, top, "┌" + new string('─', SlotInterior) + "┐" + new string(' ', inner) + "┌" + new string('─', SlotInterior) + "┐", Rule, Bg);
+				Screen.Write(left, top + 1, "│" + new string(' ', SlotInterior) + "├" + new string('─', half) + "┬" + new string('─', half) + "┤" + new string(' ', SlotInterior) + "│", Rule, Bg);
+				Screen.Write(left, top + 2, "│" + new string(' ', SlotInterior) + "│" + new string(' ', half) + "│" + new string(' ', half) + "│" + new string(' ', SlotInterior) + "│", Rule, Bg);
+				Screen.Write(left, top + 3, "│" + new string(' ', SlotInterior) + "│" + new string(' ', half) + "│" + new string(' ', half) + "│" + new string(' ', SlotInterior) + "│", Rule, Bg);
+				Screen.Write(left, top + 4, "│" + new string(' ', SlotInterior) + "├" + new string('─', half) + "┴" + new string('─', half) + "┤" + new string(' ', SlotInterior) + "│", Rule, Bg);
+				Screen.Write(left, top + 5, "└" + new string('─', SlotInterior) + "┘" + new string(' ', inner) + "└" + new string('─', SlotInterior) + "┘", Rule, Bg);
 
 				DrawCount(centreX + 1, top + 2, half - 2, "Deck", Field.scrollsIn[1, 0]);
 				DrawCount(centreX + 1, top + 3, half - 2, "Void", Field.scrollsIn[1, 2]);
@@ -343,9 +371,9 @@ namespace Board {
 				DrawBattlefield(1, leftBoxX, top + 2);
 				DrawBattlefield(0, rightBoxX, top + 2);
 			} else {
-				Screen.Write(left, top, "┌" + new string('─', SlotInterior) + "╥" + new string('─', half) + "╥" + new string('─', half) + "╥" + new string('─', SlotInterior) + "┐", Rule, Bg);
-				Screen.Write(left, top + 1, "│" + new string(' ', SlotInterior) + "║" + new string(' ', half) + "║" + new string(' ', half) + "║" + new string(' ', SlotInterior) + "│", Rule, Bg);
-				Screen.Write(left, top + 2, "└" + new string('─', SlotInterior) + "╨" + new string('─', half) + "╨" + new string('─', half) + "╨" + new string('─', SlotInterior) + "┘", Rule, Bg);
+				Screen.Write(left, top, "┌" + new string('─', SlotInterior) + "┬" + new string('─', half) + "┬" + new string('─', half) + "┬" + new string('─', SlotInterior) + "┐", Rule, Bg);
+				Screen.Write(left, top + 1, "│" + new string(' ', SlotInterior) + "│" + new string(' ', half) + "│" + new string(' ', half) + "│" + new string(' ', SlotInterior) + "│", Rule, Bg);
+				Screen.Write(left, top + 2, "└" + new string('─', SlotInterior) + "┴" + new string('─', half) + "┴" + new string('─', half) + "┴" + new string('─', SlotInterior) + "┘", Rule, Bg);
 
 				DrawCount(centreX + 1, top + 1, half - 2, "Deck", Field.scrollsIn[1, 0]);
 				DrawCount(centreX + half + 2, top + 1, half - 2, "Deck", Field.scrollsIn[0, 0]);
@@ -402,8 +430,14 @@ namespace Board {
 						Screen.Write(cx + 1, top + 1, Fit(HandName(held, i)), Card, Bg);
 						Screen.Write(cx + SlotInterior + 1, top + 1, "│", Rule, Bg);
 						Screen.Write(cx, top + 2, "└" + new string('─', SlotInterior) + "┘", Rule, Bg);
-						handRects[player, i] = new Rect(cx + 1, top, SlotInterior, FullHandRows);
+						/*
+						 * Interior only, in both axes, matching slotRects. It used to
+						 * span the box's height but not its width, so a highlight
+						 * covered the border rows without covering the border columns.
+						 */
+						handRects[player, i] = new Rect(cx + 1, top + 1, SlotInterior, 1);
 					}
+					handBoxed[player] = true;
 					return;
 				}
 			}
@@ -418,6 +452,115 @@ namespace Board {
 				Screen.Write(cx, row, Fit(HandName(held, i)), Card, Bg);
 				handRects[player, i] = new Rect(cx, row, SlotInterior, 1);
 			}
+			handBoxed[player] = false;
+		}
+
+		/**
+		 * DrawSelection
+		 * Marks whatever the cursor is pointing at, and whatever it has already
+		 * settled on.
+		 *
+		 * The board is drawn entirely in single rules, so a selection is shown by
+		 * promoting the rules around one card to double lines. Nothing is moved or
+		 * redrawn; only the boundary characters are overwritten, and the geometry
+		 * comes from the rectangles the bands recorded rather than being worked out
+		 * a second way.
+		 */
+		private static void DrawSelection() {
+			if (!Selection.Active)
+				return;
+
+			short actor = Selection.Player;
+
+			switch (Selection.Current) {
+				case Stage.Hand:
+					MarkHand(actor, Selection.HandIndex, Cursor);
+					break;
+
+				case Stage.Place:
+					MarkHand(actor, Selection.HandIndex, Chosen);
+					MarkSlot(actor, Selection.Line, Selection.Slot, Cursor);
+					break;
+
+				case Stage.Attacker:
+					MarkSlot(actor, Selection.Line, Selection.Slot, Cursor);
+					break;
+
+				case Stage.Target:
+					MarkSlot(actor, Selection.FromLine, Selection.FromSlot, Chosen);
+					MarkSlot(Selection.CursorPlayer, Selection.Line, Selection.Slot, Cursor);
+					break;
+			}
+		}
+
+		/**
+		 * MarkSlot
+		 * Doubles the rules around one field cell.
+		 *
+		 * The cell's own horizontal edges become ═ as well as its verticals becoming
+		 * ║, because inside a full grid the verticals alone would not say which of
+		 * the two neighbouring cells was meant.
+		 */
+		private static void MarkSlot(int player, int line, int slot, ConsoleColor colour) {
+			if (player < 0 || player > 1 || line < 0 || line >= Lines || slot < 0 || slot >= Slots)
+				return;
+
+			Rect area = slotRects[player, line, slot];
+			MarkSides(area, colour);
+			MarkRule(area, area.y - 1, '╥', colour, true);
+			MarkRule(area, area.y + area.height, '╨', colour, true);
+		}
+
+		/**
+		 * MarkHand
+		 * Doubles the rules around one card in a hand.
+		 *
+		 * A boxed card has its own frame to promote. A card in the bare compact row
+		 * has none, so the one column of clearance either side carries the mark
+		 * instead; that costs no extra row and so leaves MinHeight alone.
+		 */
+		private static void MarkHand(int player, int index, ConsoleColor colour) {
+			if (player < 0 || player > 1 || index < 0 || index >= MaxHand)
+				return;
+			if (index >= Field.scrollLists[player, 1].Count)
+				return;
+
+			Rect area = handRects[player, index];
+			MarkSides(area, colour);
+
+			if (handBoxed[player]) {
+				Screen.Put(area.x - 1, area.y - 1, '╓', colour, Bg);
+				Screen.Put(area.x + area.width, area.y - 1, '╖', colour, Bg);
+				Screen.Put(area.x - 1, area.y + area.height, '╙', colour, Bg);
+				Screen.Put(area.x + area.width, area.y + area.height, '╜', colour, Bg);
+			}
+		}
+
+		/**
+		 * MarkSides
+		 * Turns the vertical rules either side of a region into double lines.
+		 */
+		private static void MarkSides(Rect area, ConsoleColor colour) {
+			for (int y = area.y; y < area.y + area.height; y++) {
+				Screen.Put(area.x - 1, y, '║', colour, Bg);
+				Screen.Put(area.x + area.width, y, '║', colour, Bg);
+			}
+		}
+
+		/**
+		 * MarkRule
+		 * One horizontal edge of a marked cell, with the junctions at its ends.
+		 *
+		 * ╥ and ╨ carry a single horizontal, so the ═ run reads as belonging to the
+		 * marked cell and the surrounding grid stays unbroken either side of it.
+		 */
+		private static void MarkRule(Rect area, int y, char junction, ConsoleColor colour, bool fill) {
+			Screen.Put(area.x - 1, y, junction, colour, Bg);
+			Screen.Put(area.x + area.width, y, junction, colour, Bg);
+			if (!fill)
+				return;
+			for (int x = area.x; x < area.x + area.width; x++)
+				Screen.Put(x, y, '═', colour, Bg);
 		}
 
 		private static string HandName(ArrayList held, int index) {
@@ -444,8 +587,17 @@ namespace Board {
 				Screen.Write(1, top + 1 + i, Clip(tail[i], Screen.Width - 2), Fg, Bg);
 		}
 
+		/**
+		 * DrawStatus
+		 * The verb list, or the cursor's key hints while a selection is running.
+		 *
+		 * The prompt is inert during a selection, so this row is the only place the
+		 * arrow keys are advertised.
+		 */
 		private static void DrawStatus(int row) {
-			Screen.Write(0, row, Clip(status, Screen.Width), ConsoleColor.DarkCyan, Bg);
+			string text = Selection.Active ? Selection.StatusText() : status;
+			ConsoleColor colour = Selection.Active ? Cursor : ConsoleColor.DarkCyan;
+			Screen.Write(0, row, Clip(text, Screen.Width), colour, Bg);
 		}
 
 		private static void DrawPrompt(int row, string input) {

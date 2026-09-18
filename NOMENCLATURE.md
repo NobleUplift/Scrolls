@@ -23,17 +23,21 @@ The game's word versus the generic trading-card-game word.
 - **Deck**, **Hand**, and **Void** are the three categories indexed in `scrollsIn` and `scrollLists`.
 - **Battlefield** is a single `Scroll` per player (`Field.battlefields[player]`), drawn as the
   isolated box on each end of the board's middle band.
-- **Lines** are the rows of six slots. The naming changed between versions and is currently
-  inconsistent in three places:
+- **Lines** are the rows of six slots. The naming drifted between versions:
 
 | Source | Names |
 |---|---|
-| `Field` doc comment (current) | Front Line (0), Forward Line (1), **Equipment Line** (2) |
+| `Field` doc comment (current) | Front Line (0), **Rear Line** (1), Equipment Line (2) |
 | `2010-07-19 Code\Objects.cs` | `frontLine`, `forwardLine`, **`rearLine`** |
 | `Scroll.line` values in the database | 1 = Front Line, 2 = **Back Line**, 3 = Either, 4 = Equipment |
 
-The third row was the "Rear Line" in 2010 and became the "Equipment Line", while the database's own
-numbering still calls slot 2 the "Back Line".
+**Resolved: row 1 is the Rear Line.** The name moved. In 2010 `rearLine` was the *third* row, which
+later became the Equipment Line, leaving row 1 briefly called the "Forward Line". Row 1 is now the
+Rear Line, which matches the card data.
+
+The database numbering is deliberately left alone: `Scroll.line` still stores 1 = Front, 2 = Back,
+3 = Either, 4 = Equipment, and `Scroll.FieldLine()` converts it to a `playerLines` row index. Two
+numbering schemes still exist, but there is now exactly one conversion between them rather than none.
 
 ## Scroll attributes
 
@@ -93,11 +97,23 @@ Table `Aztec` in `BoosterPacks.sdf`. Four scrolls, all with `creator` = `PatPete
 
 ## Player commands
 
-`draw`, `place <hand position> <slot>`, `help`, and `quit`, all listed in
-`PlayerCommands.allCommands`. `SystemCommands.DrawHand` is the opening draw.
+`draw`, `place`, `attack`, `help`, and `quit`, all listed in `PlayerCommands.allCommands`.
+`SystemCommands.DrawHand` is the opening draw.
 
-`place` takes the target line from the scroll itself via `Scroll.FieldLine()` rather than asking for
-one, so Element Force (database line 4) goes to the Equipment line automatically.
+`place` and `attack` with no arguments open a **cursor**, which is the normal way to use them: pick a
+scroll, then pick where it goes, with the arrow keys. `place <hand position> <line> <slot>` does the
+same thing typed, where the line is `front`, `rear`, `equip` (also `back`, `equipment`, `mage`) or a
+number. `place <hand position> <slot>` keeps the older two-argument behaviour of taking the line from
+the scroll itself via `Scroll.FieldLine()`, so Element Force (database line 4) still goes to the
+Equipment Line automatically.
+
+- **Select**, **cursor**, **stage**, and **target** are the new vocabulary. The five stages are
+  `None`, `Hand`, `Place`, `Attacker`, `Target` (`Board.Selection`).
+- **Shield**: a scroll on the Rear Line is shielded by the Front Line scroll **in its own column**,
+  and by nothing else. An empty front slot exposes whatever is behind it.
+- The Equipment Line is neither a target nor an attacker.
+- **Destroyed** is what happens at zero endurance; the scroll goes to the **Void**, which until now
+  was allocated and never written to.
 
 ## Fixed quantities
 
@@ -112,3 +128,16 @@ constants as everything else and sets `BasicBoard.MinWidth` from a full hand, so
 No occurrence anywhere of: arsenal, graveyard, discard, mana, summon, library, exile, banish, token,
 trap, relic, turn, phase, round, match, life, or health. There is no vocabulary yet for turn
 structure or for a player's life total.
+
+**Update.** Attacking, damage, targeting, destruction and selection were all listed here as absent
+and now exist; see "Player commands" above. What is still absent, and is the next thing missing:
+
+- **Turn structure.** `Program.currentPlayer` is still 0 and never changes, so every command runs as
+  player 1 and a scroll may attack as often as it likes. There is no turn, phase, priority or pass.
+- **A win condition.** Nothing ends the game but `quit`. `Field.battlefields[player]` is a single
+  `Scroll` per player that is still never populated, and is the obvious candidate for the thing a
+  player loses by having destroyed.
+- **The rest of the stat block.** `accuracy`, `intelligence`, `resistence`, `weakness` and `types`
+  are loaded and displayed but take no part in combat; damage is power less armor and nothing else.
+  `resistence` and `weakness` hold comma-separated type lists and are still never split.
+- **`stance`** and **`effect`** remain vocabulary without an implementation.

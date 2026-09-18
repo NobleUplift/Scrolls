@@ -31,9 +31,13 @@ namespace Objects
 		 * [0, x, y] - Player 1
 		 * [1, x, y] - Player 2
 		 * [x, 0, y] - Front Line
-		 * [x, 1, y] - Forward Line
+		 * [x, 1, y] - Rear Line
 		 * [x, 2, y] - Equipment Line
 		 * [x, y, z] - Individual scroll from left to right
+		 *
+		 * Row 1 was called the Forward Line here, the Back Line by the database's
+		 * own numbering, and the Rear Line by the card data. Rear wins; Scroll.line
+		 * still uses the database numbering and FieldLine converts.
 		 */
 		public static Scroll[,,] playerLines;
 
@@ -359,7 +363,7 @@ namespace Objects
 		 * Translates the database's line numbering into a Field.playerLines row.
 		 *
 		 * The database stores 1 Front, 2 Back, 3 Either, 4 Equipment, while
-		 * Field.playerLines is indexed 0 Front, 1 Forward, 2 Equipment. Nothing
+		 * Field.playerLines is indexed 0 Front, 1 Rear, 2 Equipment. Nothing
 		 * converted between the two before, so a card's stored line was never a
 		 * usable row index. Either resolves to the front row.
 		 */
@@ -371,6 +375,76 @@ namespace Objects
 				case 4: return 2;
 				default: return 0;
 			}
+		}
+
+		/**
+		 * IsEntity
+		 * Whether this scroll is a creature rather than Equipment.
+		 *
+		 * Entities hold a line, take damage and attack; Equipment does none of
+		 * those. ToString already splits on the same boundary.
+		 */
+		public bool IsEntity() {
+			return this.line >= 1 && this.line <= 3;
+		}
+
+		/**
+		 * Attacks are stored as one comma-delimited column, each entry being
+		 * <slot>:<Attack Name>:<power>. Deck.ReadScroll splits on the comma; the
+		 * colons were never parsed until now.
+		 *
+		 * These parse on demand and never write back into the attacks array,
+		 * because Copy hands that array to every duplicate of a card by reference.
+		 * Caching a parsed value into it would alter every other copy in play.
+		 */
+		private string AttackPart(int index, int part) {
+			if (this.attacks == null || index < 0 || index >= this.attacks.Length)
+				return "";
+			string entry = this.attacks[index];
+			if (entry == null)
+				return "";
+			string[] fields = entry.Split(':');
+			if (part < 0 || part >= fields.Length)
+				return "";
+			return fields[part].Trim();
+		}
+
+		/**
+		 * AttackName
+		 * The display name of one attack, or "" if there is no such attack.
+		 */
+		public string AttackName(int index) {
+			return AttackPart(index, 1);
+		}
+
+		/**
+		 * AttackPower
+		 * The power of one attack, or 0 when the entry carries none.
+		 *
+		 * The second attack of every shipped card has no :power suffix, so a
+		 * missing field is normal rather than an error.
+		 */
+		public short AttackPower(int index) {
+			short power;
+			if (!Int16.TryParse(AttackPart(index, 2), out power))
+				return 0;
+			return power;
+		}
+
+		/**
+		 * PrimaryAttack
+		 * Index of the first attack that can actually deal damage, or -1.
+		 *
+		 * An empty attacks column arrives from the database as a one-element array
+		 * holding "", not as an empty array, so length alone proves nothing.
+		 */
+		public int PrimaryAttack() {
+			if (this.attacks == null)
+				return -1;
+			for (int index = 0; index < this.attacks.Length; index++)
+				if (AttackPower(index) > 0)
+					return index;
+			return -1;
 		}
 
 		public Scroll(short line, string nameAbb, string name, string effect) {

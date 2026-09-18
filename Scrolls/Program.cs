@@ -42,7 +42,7 @@ namespace Scrolls {
 			Screen.Init("Scrolls");
 
 			BasicBoard.title = "Welcome to Scrolls!";
-			BasicBoard.status = " draw | place <hand> <slot> | help | quit ";
+			BasicBoard.status = " draw | place | attack | help | quit ";
 
 			new Field(DeckSize, DeckSize);
 
@@ -122,6 +122,16 @@ namespace Scrolls {
 					continue;
 				}
 
+				/*
+				 * A running selection owns the keyboard. The prompt is inert until
+				 * it finishes, so that Enter and Escape mean one thing at a time.
+				 */
+				if (Selection.Active) {
+					CursorKey(key);
+					dirty = true;
+					continue;
+				}
+
 				switch (key.Key) {
 					case ConsoleKey.Enter:
 						quit = PlayerCommands.runCommand(currentPlayer, input);
@@ -151,6 +161,43 @@ namespace Scrolls {
 						break;
 				}
 			}
+		}
+
+		/**
+		 * CursorKey
+		 * One keystroke while a selection is running.
+		 *
+		 * Arrow keys reach here with a KeyChar of '\0', which Char.IsControl calls a
+		 * control character, so the typing branch below discards them. They have to
+		 * be read off key.Key instead.
+		 *
+		 * Movement only ever lands on a position the command would accept, so Enter
+		 * never has to refuse. Revalidate runs afterwards because placing a scroll
+		 * shortens the hand and destroying one empties a cell, either of which can
+		 * pull the ground out from under the cursor.
+		 */
+		private static void CursorKey(ConsoleKeyInfo key) {
+			switch (key.Key) {
+				case ConsoleKey.LeftArrow:
+					Selection.Move(-1, 0);
+					break;
+				case ConsoleKey.RightArrow:
+					Selection.Move(1, 0);
+					break;
+				case ConsoleKey.UpArrow:
+					Selection.Move(0, -1);
+					break;
+				case ConsoleKey.DownArrow:
+					Selection.Move(0, 1);
+					break;
+				case ConsoleKey.Enter:
+					Selection.Confirm();
+					break;
+				case ConsoleKey.Escape:
+					Selection.Back();
+					break;
+			}
+			Selection.Revalidate();
 		}
 
 		/**

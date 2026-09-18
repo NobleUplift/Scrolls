@@ -1,38 +1,53 @@
 # Line endings
 #
-# core.autocrlf is false and this repo previously had no .gitattributes, so git
-# stored bytes exactly as written. That made line endings a property of whichever
-# tool last touched a file: anything that rewrote a source file wholesale tended to
-# emit LF, which differs from the committed CRLF form on every single line and turns
-# the diff into a whole-file replacement that hides the real change.
+# core.autocrlf is false and this repo has always stored bytes exactly as written.
+# Every .cs file, and every Visual Studio project file, is CRLF *in the committed
+# blob itself* - not LF that git converts on checkout.
 #
-# Pinning them here makes that impossible regardless of the editor or tool used.
-
-# Let git decide what is text, then pin the ending per type below.
-* text=auto
-
-# The C# sources and the Visual Studio project files are CRLF.
+# That is why nothing here says `text eol=crlf`. It reads as "these files are CRLF"
+# but it means "store LF in the blob and convert on checkout", which is the opposite
+# of what this history contains. Setting it made git run every file through the
+# clean filter before diffing, so all 482 lines of Board.cs and all 172 lines of
+# Scrolls.csproj registered as changed when one line had been added. Files nobody
+# had touched, Screen.cs and AssemblyInfo.cs among them, would have been rewritten
+# by the next `git add` as well.
 #
-# Board.cs and Screen.cs also carry non-ASCII box-drawing glyphs and must stay
-# UTF-8 with BOM. Deliberately NOT declared with working-tree-encoding: that
-# attribute is for non-UTF-8 working trees, and pointing it at UTF-8 here would put
-# git in charge of a byte sequence the C# compiler depends on. The BOM stays a
-# manual convention, documented in CLAUDE.md.
-*.cs        text eol=crlf
-*.csproj    text eol=crlf
-*.sln       text eol=crlf
-*.config    text eol=crlf
-*.settings  text eol=crlf
-*.xsd       text eol=crlf
-*.xsc       text eol=crlf
-*.xss       text eol=crlf
-*.user      text eol=crlf
-*.ps1       text eol=crlf
+# `-text` is the declaration that matches the bytes: git converts nothing, in either
+# direction, and a diff shows only what actually changed.
+#
+# The cost is that this cannot *enforce* CRLF the way the previous version intended.
+# A tool that rewrites a source file with bare LF still produces a whole-file diff.
+# Guarding against that stays a manual convention, documented in CLAUDE.md, and the
+# check is: any 0x0A not preceded by 0x0D.
+#
+# Switching to enforcement later means `git add --renormalize .` and one commit that
+# rewrites every blob in the tree. That is a deliberate decision, not a side effect
+# of editing this file.
 
-# Documentation is LF, which is how it is already committed.
-*.md          text eol=lf
-.gitignore    text eol=lf
-.gitattributes text eol=lf
+# Convert nothing by default.
+* -text
+
+# Sources and project files: CRLF on disk and CRLF in the blob.
+#
+# Board.cs and Screen.cs also carry non-ASCII box-drawing glyphs and must stay UTF-8
+# with BOM. Deliberately NOT declared with working-tree-encoding: that attribute is
+# for non-UTF-8 working trees, and pointing it at UTF-8 here would put git in charge
+# of a byte sequence the C# compiler depends on. The BOM stays a manual convention.
+*.cs        -text
+*.csproj    -text
+*.sln       -text
+*.config    -text
+*.settings  -text
+*.xsd       -text
+*.xsc       -text
+*.xss       -text
+*.user      -text
+*.ps1       -text
+
+# Documentation and dotfiles are LF, which is how they are already committed.
+*.md           -text
+.gitignore     -text
+.gitattributes -text
 
 # Binary. SQL CE databases in particular must never be line-ending converted;
 # they are the only copies of the card data.

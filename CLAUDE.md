@@ -56,18 +56,39 @@ which has to be written each time it is needed; it is not committed. It works li
    & "C:\WINDOWS\Microsoft.NET\Framework\v4.0.30319\csc.exe" /target:exe /platform:x86 `
        /out:<scratch>\Harness.exe /r:<scratch>\Scrolls.exe <scratch>\Harness.cs
    ```
-2. In `Main`, P/Invoke `AllocConsole` **before touching `System.Console`**. The process has no console
-   when launched from a tool, and an allocated console is classic conhost, which *does* honour
-   `Console.SetWindowSize` where Windows Terminal ignores it. This is what makes arbitrary sizes
-   testable.
-3. Drive `Objects.Field`, `Deck`, and `PlayerCommands` directly, then call `BasicBoard.Render`.
-4. Read `Board.Screen`'s private static `back` buffer by reflection and write the frame to a **file**.
+2. In `Main`, **before touching `System.Console`**, P/Invoke `FreeConsole`, then `AllocConsole`, then
+   rebind the standard handles:
+
+   ```csharp
+   IntPtr h = CreateFile("CONOUT$", GENERIC_READ | GENERIC_WRITE,
+                         FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+   SetStdHandle(STD_OUTPUT_HANDLE, h);   // and STD_ERROR_HANDLE; CONIN$ for STD_INPUT_HANDLE
+   ```
+
+   **`AllocConsole` on its own is not enough**, and it fails silently. When the parent process hands
+   the harness pipes, `AllocConsole` leaves the standard handles pointing at them, so
+   `Console.WindowWidth` throws `IOException: The handle is invalid` and `Screen.GetConsoleSize`
+   quietly falls back to its hardcoded 80x25 for *every* size asked for. The harness then reports
+   passes for layouts it never actually rendered. An allocated console is classic conhost, which
+   honours `Console.SetWindowSize` where Windows Terminal ignores it; that is what makes arbitrary
+   sizes testable, but only once the handles point at it.
+3. Resize in the right order. The window can never exceed the buffer, so shrink the window first and
+   grow the buffer first: `SetWindowSize(min(w, cur), min(h, cur))`, then `SetBufferSize(w, h)`, then
+   `SetWindowSize(w, h)`. Then call `Screen.EnsureSize()`.
+4. Drive `Objects.Field`, `Deck`, `PlayerCommands` and `Board.Selection` directly, then call
+   `BasicBoard.Render`.
+5. Read `Board.Screen`'s private static `back` buffer by reflection and write the frame to a **file**.
    Do not print it: stdout goes to the allocated console, not to the captured pipe.
 
 Assert that every row is exactly `Screen.Width` wide. A row of the wrong width is the signature of the
 shearing bug this renderer exists to fix, so that single check catches most layout regressions. Run it
 at 80x25 (compact layout), something tall like 100x50 (full layout), and below the minimum to confirm
-the "too small" notice.
+the "too small" notice. **Treat a size the console refused to give you as a failure, not a skip** —
+that is exactly how the silent 80x25 fallback hides behind a green run.
+
+Drive the cursor through `Selection.Move` followed by `Selection.Revalidate`, which is the pair
+`Program.CursorKey` performs per keystroke. Calling `Confirm` without ever calling `Move` exercises
+none of the navigation, and that is where the bugs are.
 
 ## Architecture
 
@@ -75,14 +96,22 @@ Five namespaces, and every file redundantly `using`s all five:
 
 - `Scrolls` (`Program.cs`) - entry point and the input loop
 - `Objects` (`Objects.cs`) - `Field` (global game state), `Deck` (database loader), `Scroll` (a card)
-- `Board` (`Screen.cs`, `Board.cs`) - `Screen` (the frame buffer), `BasicBoard` (layout and drawing),
-  `MessageLog` (scrollback)
+- `Board` (`Screen.cs`, `Board.cs`, `Selection.cs`) - `Screen` (the frame buffer), `BasicBoard`
+  (layout and drawing), `MessageLog` (scrollback), `Selection` (the modal cursor)
 - `Commands` (`Commands.cs`) - `SystemCommands` (automated sequences) and `PlayerCommands` (verbs)
 - `ArtificialIntelligence` - an empty placeholder class
 
-`Board` is the one namespace spanning two files: `Screen.cs` knows about characters and the terminal,
-`Board.cs` knows about cards and layout. Nothing outside `Screen.cs` may call `Console.Write`, or the
-buffers fall out of step with what the terminal is actually showing.
+`Board` is the one namespace spanning three files: `Screen.cs` knows about characters and the
+terminal, `Board.cs` knows about cards and layout, and `Selection.cs` knows where the cursor is but
+no game rules. Nothing outside `Screen.cs` may call `Console.Write`, or the buffers fall out of step
+with what the terminal is actually showing.
+
+`Selection` calls into `Commands` for the rules and `Commands` calls into `Board` for `MessageLog`,
+so the two namespaces reference each other. That is legal within one assembly and every file already
+`using`s all five namespaces, so it needs no plumbing.
+
+The project file lists every source explicitly (`<Compile Include="..." />`); there is no globbing, so
+a new `.cs` file that is not added there simply will not be compiled.
 
 ### Global state lives on `Objects.Field`
 
@@ -122,8 +151,25 @@ small" notice instead. `MinWidth` is driven by a full eleven-card hand, which is
 37-column board itself.
 
 `BasicBoard` records the screen rectangle of every slot and hand position as it draws
-(`SlotRect`, `HandRect`, `BattlefieldRect`). Nothing selects cards yet, but combined with
-`Screen.Recolour` this is how a cursor would highlight a slot without duplicating the layout maths.
+(`SlotRect`, `HandRect`, `BattlefieldRect`), and `DrawSelection` reads them back to mark whatever the
+cursor is on. Those rects are the only place the layout arithmetic lives; a second copy of it would
+drift the moment a glyph string changed.
+
+**Single rules are the board, double rules mean "selected".** The grid used to divide its own slots
+with `║` and `═`, which left nothing heavier to mark a cursor with, so every internal separator in
+`DrawField` and `DrawMiddle` was demoted to `│ ─ ┬ ┼ ┴ ├ ┤`. A marked field cell gets `║` down its
+sides and `═` along its own top and bottom edges, joined to the surrounding grid with `╥` and `╨`; a
+marked hand card gets `╓ ╖ ╙ ╜` around it. Adding any permanent double line to the board takes that
+vocabulary back again.
+
+The compact hand is a bare row of abbreviations with no border to promote, so a selection there is
+marked with `║` in the single column of clearance either side. That is why the two-line hand this
+feature seemed to need never happened, and why `MinHeight` is still 23.
+
+Two things can be marked at once, so they are told apart by colour rather than weight: the live
+cursor is `Yellow` and the choice already confirmed behind it is `DarkYellow`. `Screen.Recolour`
+exists for this and is still unused; `DrawSelection` overwrites characters instead, because the mark
+changes the glyphs and not only their colour.
 
 ### Card data comes from SQL CE, not from the typed DataSet
 
@@ -181,7 +227,7 @@ raw value is not safe.
 
 ### Two `line` numbering schemes coexist
 
-`Field`'s comment defines line index 0 = Front, 1 = Forward, 2 = Equipment. `Scroll.line` (loaded from
+`Field`'s comment defines line index 0 = Front, 1 = Rear, 2 = Equipment. `Scroll.line` (loaded from
 the database) uses 1 = Front, 2 = Back, 3 = Either, 4 = Equipment, and `Scroll.ToString` branches on
 `line < 3` to decide between the Entity and Equipment layout. `Scroll.FieldLine()` converts the
 database numbering to a `playerLines` row index, resolving Either to the front row. Use it rather
@@ -196,8 +242,56 @@ one dispatch, and one redraw per iteration.
 
 `PlayerCommands.allCommands` and `helpText` are the single source of truth for verbs; `runCommand`
 parses a line into verb plus arguments and dispatches. Adding a verb means adding it to both tables
-and to the `switch`. The acting player is threaded through `runCommand` but there is no turn order
+and to the `switch`, and to `BasicBoard.status` in `Program.Main`, which is a third hand-maintained
+copy of the same list. The acting player is threaded through `runCommand` but there is no turn order
 yet, so everything runs as player 1.
+
+### The selection cursor
+
+`Board.Selection` is a modal cursor in five stages: `None` while the player is typing, then
+`Hand` → `Place` for playing a scroll, and `Attacker` → `Target` for attacking. Bare `place` and
+bare `attack` at the prompt open the two chains; `place <hand> <line> <slot>` still works typed, and
+two arguments keep the original behaviour of taking the line from the card.
+
+While a stage is running it owns the keyboard. `Program.CursorKey` handles it and the text prompt is
+inert, so Enter and Escape mean one thing at a time. Arrow keys reach the input loop with a
+`KeyChar` of `'\0'`, which `Char.IsControl` calls a control character, so they must be read off
+`key.Key` and not the typing branch.
+
+**The cursor only ever stands on a position the command would accept.** `Selection.LegalCells`
+filters every cell through `PlayerCommands.CanPlace` / `CanAttackFrom` / `CanTarget`, so Enter never
+has to refuse and a stage with no legal position is never entered at all. The rules live in
+`PlayerCommands` and are asked rather than copied, so the cursor and a typed command cannot disagree.
+`Selection.Revalidate` runs after every keystroke because playing a scroll shortens the hand and
+destroying one empties a cell; it relocates the cursor **only** when the position it held has gone,
+or moving would drag it back to the first card each time.
+
+Up and down are not line indices. `DrawField` draws player 1's lines in reverse so both front lines
+meet in the middle, so `ScreenUpStep` flips the direction depending on whose field the cursor is
+standing on, which for the `Target` stage is the other player's.
+
+### Placement and combat rules
+
+`PlaceLines(scroll)` gives the rows a scroll may occupy, which is what `Scroll.FieldLine()` could not
+express: it has to return one row, so it collapses "Either" (`line == 3`) to the front. Nothing in
+the shipped `Aztec` table is line 3, so no card offers a real front-versus-rear choice yet, though
+`aztec_tcg_cards.csv` gives Aztec God a `FieldPosition` of `Front Line/Rear Line`.
+
+`CanTarget` is a per-column shield: a rear scroll is blocked only by the front scroll in **its own
+column**, so an empty front slot exposes whatever sits behind it even when the rest of the front line
+is full. The equipment line is never a target and never attacks.
+
+`Attack` takes the attack's power less the defender's armor off its endurance, and a defender at zero
+or less goes to the void. **A vacated cell takes `new Scroll()`, never `null`** — the `Field`
+constructor seeds all 36 cells with placeholder scrolls whose `id` is 0, and that is what the
+occupancy tests read. Endurance is mutated in place, which is safe because every scroll on the field
+is a distinct object from `Scroll.Copy`.
+
+`Scroll.AttackName` / `AttackPower` / `PrimaryAttack` parse the `<slot>:<Name>:<power>` attack
+strings, which the database has always carried and nothing read until now. They parse on demand and
+**never write back into `attacks`**: `Copy` hands that array to every duplicate of a card by
+reference, so caching into it would alter every other copy in play. The second attack of every
+shipped card has no `:power` suffix, and an empty column arrives as a one-element array holding `""`.
 
 Command output goes to `MessageLog`, never to `Console.WriteLine`, otherwise it is overwritten by the
 next frame.

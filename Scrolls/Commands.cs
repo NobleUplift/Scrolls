@@ -75,13 +75,15 @@ namespace Commands {
 		 * "draw" while runCommand also handled "place", so a valid verb was
 		 * rejected as invalid before it ever reached the dispatcher.
 		 */
-		public static string[] allCommands = { "draw", "place", "help", "quit" };
+		public static string[] allCommands = { "draw", "place", "attack", "help", "quit" };
 
 		private static string[,] helpText = {
-			{ "draw",              "Draw the top scroll of your deck." },
-			{ "place <hand> <slot>", "Play a scroll from your hand into a slot (1-6)." },
-			{ "help",              "Show this list." },
-			{ "quit",              "Leave the game." }
+			{ "draw",                     "Draw the top scroll of your deck." },
+			{ "place",                    "Pick a scroll and a destination with the arrow keys." },
+			{ "place <hand> <line> <slot>", "Play a scroll directly. Line is front, rear or equip." },
+			{ "attack",                   "Pick an attacker and a target with the arrow keys." },
+			{ "help",                     "Show this list." },
+			{ "quit",                     "Leave the game." }
 		};
 
 		/**
@@ -111,7 +113,13 @@ namespace Commands {
 					draw(player);
 					return false;
 				case "place":
-					place(player, args);
+					if (args.Length == 0)
+						BeginPlace(player);
+					else
+						place(player, args);
+					return false;
+				case "attack":
+					BeginAttack(player);
 					return false;
 				case "help":
 					help();
@@ -127,7 +135,7 @@ namespace Commands {
 		public static void help() {
 			MessageLog.Add("Commands:");
 			for (int i = 0; i < helpText.GetLength(0); i++)
-				MessageLog.Add("  " + helpText[i, 0].PadRight(22) + helpText[i, 1]);
+				MessageLog.Add("  " + helpText[i, 0].PadRight(30) + helpText[i, 1]);
 		}
 
 		/**
@@ -164,24 +172,25 @@ namespace Commands {
 
 		/**
 		 * place
-		 * Plays a scroll out of the hand and onto the field.
+		 * Parses a typed placement and hands it to Place.
 		 *
-		 * The target line comes from the scroll itself rather than being chosen, so
-		 * this needs no cursor; the slot is given as a number.
+		 * Two arguments keep the original behaviour, taking the line from the scroll
+		 * itself. Three let the player name the line, which is the whole point of
+		 * the change: a scroll legal on either line could never be steered before.
 		 *
 		 * @param player The acting player
-		 * @param args   hand position then slot, both one-based
+		 * @param args   hand position, optionally a line, then slot
 		 */
 		public static void place(short player, string[] args) {
 			if (args.Length < 2) {
-				MessageLog.Add("Usage: place <hand position> <slot>");
+				MessageLog.Add("Usage: place <hand position> [front|rear|equip] <slot>");
 				return;
 			}
 
 			int handIndex;
 			int slot;
-			if (!TryParse(args[0], out handIndex) || !TryParse(args[1], out slot)) {
-				MessageLog.Add("Both arguments must be numbers.");
+			if (!TryParse(args[0], out handIndex) || !TryParse(args[args.Length - 1], out slot)) {
+				MessageLog.Add("Hand position and slot must be numbers.");
 				return;
 			}
 
@@ -193,24 +202,252 @@ namespace Commands {
 				MessageLog.Add("No scroll at hand position " + (handIndex + 1) + ".");
 				return;
 			}
+
+			Scroll scroll = (Scroll) hand[handIndex];
+			int line;
+
+			if (args.Length >= 3) {
+				if (!ParseLine(args[1], out line)) {
+					MessageLog.Add("\"" + args[1] + "\" is not a line. Use front, rear or equip.");
+					return;
+				}
+			} else {
+				line = scroll.FieldLine();
+			}
+
+			Place(player, handIndex, line, slot);
+		}
+
+		/**
+		 * ParseLine
+		 * Reads a line as a name or as a one-based number.
+		 */
+		private static bool ParseLine(string text, out int line) {
+			line = 0;
+			if (text == null)
+				return false;
+
+			switch (text.ToLower()) {
+				case "front": line = 0; return true;
+				case "rear":  line = 1; return true;
+				case "back":  line = 1; return true;
+				case "equip": line = 2; return true;
+				case "equipment": line = 2; return true;
+				case "mage": line = 2; return true;
+			}
+
+			int number;
+			if (TryParse(text, out number) && number >= 1 && number <= BasicBoard.Lines) {
+				line = number - 1;
+				return true;
+			}
+			return false;
+		}
+
+		/**
+		 * LineName
+		 * A line index as the player sees it, for messages and the status row.
+		 */
+		public static string LineName(int line) {
+			switch (line) {
+				case 0: return "front";
+				case 1: return "rear";
+				case 2: return "equipment";
+				default: return "line " + (line + 1);
+			}
+		}
+
+		/**
+		 * PlaceLines
+		 * The field rows a scroll may legally occupy.
+		 *
+		 * Scroll.FieldLine collapses "Either" to the front row because it has to
+		 * return one answer. This returns the whole set instead, so a cursor can
+		 * offer the choice and a typed line can be checked against it.
+		 */
+		public static short[] PlaceLines(Scroll scroll) {
+			if (scroll == null)
+				return new short[] { 0 };
+
+			switch (scroll.line) {
+				case 1: return new short[] { 0 };
+				case 2: return new short[] { 1 };
+				case 3: return new short[] { 0, 1 };
+				case 4: return new short[] { 2 };
+				default: return new short[] { 0 };
+			}
+		}
+
+		/**
+		 * Occupied
+		 * Whether a field cell holds a real scroll.
+		 *
+		 * Empty cells are placeholder Scrolls with id 0 seeded by the Field
+		 * constructor, not nulls, though both are treated as empty here.
+		 */
+		public static bool Occupied(int player, int line, int slot) {
+			if (line < 0 || line >= BasicBoard.Lines || slot < 0 || slot >= BasicBoard.Slots)
+				return false;
+			Scroll scroll = Field.playerLines[player, line, slot];
+			return scroll != null && scroll.id != 0;
+		}
+
+		/**
+		 * CanPlace
+		 * Whether a scroll may be played into a given cell.
+		 */
+		public static bool CanPlace(short player, Scroll scroll, int line, int slot) {
+			if (scroll == null || slot < 0 || slot >= BasicBoard.Slots)
+				return false;
+			if (Occupied(player, line, slot))
+				return false;
+
+			short[] lines = PlaceLines(scroll);
+			for (int i = 0; i < lines.Length; i++)
+				if (lines[i] == line)
+					return true;
+			return false;
+		}
+
+		/**
+		 * CanAttackFrom
+		 * Whether a cell holds something able to declare an attack.
+		 *
+		 * Equipment neither attacks nor is attacked, and a scroll whose attacks all
+		 * lack a power cannot deal damage, so neither is offered to the cursor.
+		 */
+		public static bool CanAttackFrom(short player, int line, int slot) {
+			if (!Occupied(player, line, slot))
+				return false;
+			Scroll scroll = Field.playerLines[player, line, slot];
+			return scroll.IsEntity() && scroll.PrimaryAttack() >= 0;
+		}
+
+		/**
+		 * CanTarget
+		 * Whether a defending cell may be attacked.
+		 *
+		 * A rear scroll is shielded only by the front scroll in its own column. An
+		 * empty front slot leaves the rear scroll behind it exposed, even when the
+		 * rest of the front line is full.
+		 */
+		public static bool CanTarget(short defender, int line, int slot) {
+			if (!Occupied(defender, line, slot))
+				return false;
+			if (line == 2)
+				return false;
+			if (line == 1 && Occupied(defender, 0, slot))
+				return false;
+			return true;
+		}
+
+		/**
+		 * Place
+		 * Moves a scroll from the hand into a field cell.
+		 *
+		 * @return true if the scroll moved
+		 */
+		public static bool Place(short player, int handIndex, int line, int slot) {
+			ArrayList hand = Field.scrollLists[player, 1];
+
+			if (handIndex < 0 || handIndex >= hand.Count) {
+				MessageLog.Add("No scroll at hand position " + (handIndex + 1) + ".");
+				return false;
+			}
 			if (slot < 0 || slot >= BasicBoard.Slots) {
 				MessageLog.Add("Slot must be between 1 and " + BasicBoard.Slots + ".");
-				return;
+				return false;
 			}
 
 			Scroll scroll = (Scroll) hand[handIndex];
-			short line = scroll.FieldLine();
 
-			if (Field.playerLines[player, line, slot] != null
-				&& Field.playerLines[player, line, slot].id != 0) {
-				MessageLog.Add("That slot is already occupied.");
-				return;
+			if (!CanPlace(player, scroll, line, slot)) {
+				if (Occupied(player, line, slot))
+					MessageLog.Add("That slot is already occupied.");
+				else
+					MessageLog.Add(scroll.name + " cannot be played to the " + LineName(line) + " line.");
+				return false;
 			}
 
 			Field.playerLines[player, line, slot] = scroll;
 			hand.RemoveAt(handIndex);
 			Sync(player);
-			MessageLog.Add(scroll.name + " placed in slot " + (slot + 1) + ".");
+			MessageLog.Add(scroll.name + " placed in " + LineName(line) + " slot " + (slot + 1) + ".");
+			return true;
+		}
+
+		/**
+		 * Attack
+		 * Resolves one attack between two field cells.
+		 *
+		 * Damage is the attack's power less the defender's armor, taken off the
+		 * defender's endurance. Endurance is mutated in place: every scroll on the
+		 * field is a distinct object from Scroll.Copy, so no other copy of the card
+		 * is affected, and there is no printed-versus-current split to maintain.
+		 *
+		 * @return true if the attack resolved
+		 */
+		public static bool Attack(short player, int line, int slot, int targetLine, int targetSlot) {
+			short defender = (short) (1 - player);
+
+			if (!CanAttackFrom(player, line, slot)) {
+				MessageLog.Add("Nothing there can attack.");
+				return false;
+			}
+			if (!CanTarget(defender, targetLine, targetSlot)) {
+				MessageLog.Add("That scroll cannot be reached.");
+				return false;
+			}
+
+			Scroll attacker = Field.playerLines[player, line, slot];
+			Scroll target = Field.playerLines[defender, targetLine, targetSlot];
+
+			int attack = attacker.PrimaryAttack();
+			short power = attacker.AttackPower(attack);
+			short damage = (short) Math.Max(0, power - target.armor);
+
+			target.endurance = (short) (target.endurance - damage);
+
+			MessageLog.Add(attacker.name + " hits " + target.name + " with "
+						   + attacker.AttackName(attack) + " for " + damage + ".");
+
+			if (target.endurance <= 0) {
+				/*
+				 * The vacated cell takes a placeholder rather than a null: the Field
+				 * constructor seeds every cell that way and CanPlace tests id, not
+				 * reference.
+				 */
+				Field.scrollLists[defender, 2].Add(target);
+				Field.playerLines[defender, targetLine, targetSlot] = new Scroll();
+				Sync(defender);
+				MessageLog.Add(target.name + " is destroyed.");
+			} else {
+				MessageLog.Add(target.name + " has " + target.endurance + " endurance left.");
+			}
+
+			return true;
+		}
+
+		/**
+		 * BeginPlace
+		 * Opens the cursor on the hand, if there is anything to play.
+		 */
+		public static void BeginPlace(short player) {
+			if (Field.scrollLists[player, 1].Count == 0) {
+				MessageLog.Add("Your hand is empty.");
+				return;
+			}
+			if (!Selection.BeginPlace(player))
+				MessageLog.Add("Nothing in your hand has anywhere to go.");
+		}
+
+		/**
+		 * BeginAttack
+		 * Opens the cursor on your own field, if anything there can attack.
+		 */
+		public static void BeginAttack(short player) {
+			if (!Selection.BeginAttack(player))
+				MessageLog.Add("Nothing on your field can attack.");
 		}
 
 		/**
