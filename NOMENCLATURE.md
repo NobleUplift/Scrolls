@@ -95,10 +95,35 @@ Table `Aztec` in `BoosterPacks.sdf`. Four scrolls, all with `creator` = `PatPete
 - Card ids encode the set. The Aztec cards are `1000000x`, and `Program.cs` builds a second deck from
   `2000000x` ids that have no rows in the database yet.
 
+## Turn structure
+
+`docs/GAMEPLAY.md` is the rules reference. The vocabulary it establishes:
+
+- A **turn** is one player's six phases; a **round** is both players having taken a turn.
+- The phases are the **Draw Phase**, **Interlude Phase**, **Rallying Phase**, **Skirmish Phase**,
+  **Regroup Phase** or **Retreat Phase**, and **End Phase**, in that order. Regroup and Retreat are
+  one phase under two names: a Regroup is earned by destroying an entity, and is the only one of the
+  two that allows an Equipment card to be played.
+- **Pass** gives up the rest of a phase. Passing an untouched Skirmish Phase skips the Regroup or
+  Retreat that would have followed it.
+- An entity's **state** is where it stands: which slot along its line, and which of the Front and Rear
+  Lines. Changing it is a **state change** in the Rallying Phase and a **position change** in a
+  Regroup or Retreat, with a separate allowance in each, and it travels one step. This is not
+  `Scroll.stance`, which remains vocabulary without an implementation.
+- **Entities only reach the field in the Rallying Phase.** The Regroup Phase's reward is an Equipment
+  card, on its own allowance rather than the Rallying Phase's carried forward. The word **summon**
+  therefore still belongs to card text (`Sacrifice for God`, `Castle Plans`) and is not a verb.
+- **War Phase** is the Prehistoric pool's name for the Skirmish Phase (`Return to Battle`,
+  `Blinding Blizzard`). Nothing uses both names.
+
+`Phase` and `Turn` live in `Scrolls\Turn.cs`, in the `Commands` namespace.
+
 ## Player commands
 
-`draw`, `place`, `attack`, `help`, and `quit`, all listed in `PlayerCommands.allCommands`.
-`SystemCommands.DrawHand` is the opening draw.
+`draw`, `place`, `move` (also `state` and `position`), `attack`, `pass`, `help`, and `quit`, all
+listed in `PlayerCommands.allCommands`. `SystemCommands.DrawHand` is the opening deal.
+
+`draw` no longer draws. The Draw Phase does that, and the verb survives only to say so.
 
 `place` and `attack` with no arguments open a **cursor**, which is the normal way to use them: pick a
 scroll, then pick where it goes, with the arrow keys. `place <hand position> <line> <slot>` does the
@@ -107,8 +132,11 @@ number. `place <hand position> <slot>` keeps the older two-argument behaviour of
 the scroll itself via `Scroll.FieldLine()`, so Element Force (database line 4) still goes to the
 Equipment Line automatically.
 
-- **Select**, **cursor**, **stage**, and **target** are the new vocabulary. The five stages are
-  `None`, `Hand`, `Place`, `Attacker`, `Target` (`Board.Selection`).
+`move` with no arguments opens a cursor the same way, picking an entity and then the cell it steps to.
+`move <line> <slot> <line> <slot>` does it typed.
+
+- **Select**, **cursor**, **stage**, and **target** are the new vocabulary. The seven stages are
+  `None`, `Hand`, `Place`, `Attacker`, `Target`, `Mover`, `Destination` (`Board.Selection`).
 - **Shield**: a scroll on the Rear Line is shielded by the Front Line scroll **in its own column**,
   and by nothing else. An empty front slot exposes whatever is behind it.
 - The Equipment Line is neither a target nor an attacker.
@@ -125,18 +153,21 @@ constants as everything else and sets `BasicBoard.MinWidth` from a full hand, so
 
 ## Absent
 
-No occurrence anywhere of: arsenal, graveyard, discard, mana, summon, library, exile, banish, token,
-trap, relic, turn, phase, round, match, life, or health. There is no vocabulary yet for turn
-structure or for a player's life total.
+This section once recorded no occurrence anywhere of: arsenal, graveyard, discard, mana, summon,
+library, exile, banish, token, trap, relic, turn, phase, round, match, life, or health.
 
-**Update.** Attacking, damage, targeting, destruction and selection were all listed here as absent
-and now exist; see "Player commands" above. What is still absent, and is the next thing missing:
+**Update.** Attacking, damage, targeting, destruction and selection were all listed here as absent and
+now exist; see "Player commands" above. **Turn, phase, round and pass** now exist too; see
+"Turn structure" above and `docs/GAMEPLAY.md`. What is still absent:
 
-- **Turn structure.** `Program.currentPlayer` is still 0 and never changes, so every command runs as
-  player 1 and a scroll may attack as often as it likes. There is no turn, phase, priority or pass.
-- **A win condition.** Nothing ends the game but `quit`. `Field.battlefields[player]` is a single
-  `Scroll` per player that is still never populated, and is the obvious candidate for the thing a
-  player loses by having destroyed.
+- **A win condition.** Nothing ends the game but `quit`. An exhausted deck logs a message and the turn
+  carries on. `Field.battlefields[player]` is a single `Scroll` per player that is still never
+  populated, and is the obvious candidate for the thing a player loses by having destroyed.
+- **Card effects.** The Interlude Phase exists in the sequence and always passes by itself, because
+  nothing in the database carries an effect to resolve there. Counters, and the responses the reaction
+  matrix in `docs/MATRIX.md` catalogues, have no representation.
+- **Hidden information.** Both hands are drawn on one screen, and there is no face-down state.
+- **Life**, **match** and **priority** still appear nowhere.
 - **The rest of the stat block.** `accuracy`, `intelligence`, `resistence`, `weakness` and `types`
   are loaded and displayed but take no part in combat; damage is power less armor and nothing else.
   `resistence` and `weakness` hold comma-separated type lists and are still never split.

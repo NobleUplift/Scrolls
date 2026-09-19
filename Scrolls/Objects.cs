@@ -281,6 +281,18 @@ namespace Objects
 		// Only for Equipment scrolls
 		public string effect;
 
+		/**
+		 * Whether this scroll has used its attack in the current Skirmish Phase.
+		 *
+		 * Per scroll rather than per card: Copy hands every duplicate the same types
+		 * and attacks arrays by reference, but each copy is its own object, so a flag
+		 * on the instance belongs to the one entity standing on the field.
+		 *
+		 * Copy deliberately does not carry it. Copies are minted by Deck.Make before
+		 * play, and Turn clears it for the active player at the start of each turn.
+		 */
+		public bool attacked;
+
 		// Hidden
 		public string creator;
 		public short date;
@@ -307,6 +319,7 @@ namespace Objects
 			this.intelligence = 0;
 			this.resistence = "";
 			this.weakness = "";
+			this.attacked = false;
 		}
 
 		public Scroll(int id ,
@@ -339,6 +352,7 @@ namespace Objects
 			this.weakness = weakness;
 			this.effect = effect;
 			this.stance = "";
+			this.attacked = false;
 		}
 
 		/**

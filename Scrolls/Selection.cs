@@ -22,11 +22,11 @@ namespace Board {
 	 * Stage
 	 * Which question the cursor is currently asking.
 	 *
-	 * None means the player is typing at the prompt. The other four run in two
-	 * pairs: pick a scroll then pick where it goes, or pick an attacker then pick
-	 * what it hits.
+	 * None means the player is typing at the prompt. The other six run in three
+	 * pairs: pick a scroll then pick where it goes, pick an attacker then pick what
+	 * it hits, or pick an entity then pick where it steps.
 	 */
-	public enum Stage { None, Hand, Place, Attacker, Target }
+	public enum Stage { None, Hand, Place, Attacker, Target, Mover, Destination }
 
 	/**
 	 * Selection
@@ -52,7 +52,7 @@ namespace Board {
 		private static int line = 0;
 		private static int slot = 0;
 
-		// The confirmed attacker, held through the Target stage
+		// The confirmed attacker or mover, held through the Target and Destination stages
 		private static int fromLine = 0;
 		private static int fromSlot = 0;
 
@@ -117,6 +117,25 @@ namespace Board {
 		}
 
 		/**
+		 * BeginMove
+		 * Opens the cursor on the first of the player's entities with a step to take.
+		 *
+		 * @return false if nothing on the player's field can reposition
+		 */
+		public static bool BeginMove(short acting) {
+			player = acting;
+			stage = Stage.Mover;
+
+			ArrayList cells = LegalCells();
+			if (cells.Count == 0) {
+				stage = Stage.None;
+				return false;
+			}
+			SetCell(cells, 0);
+			return true;
+		}
+
+		/**
 		 * Back
 		 * Steps one stage towards the prompt.
 		 */
@@ -127,6 +146,11 @@ namespace Board {
 					break;
 				case Stage.Target:
 					stage = Stage.Attacker;
+					line = fromLine;
+					slot = fromSlot;
+					break;
+				case Stage.Destination:
+					stage = Stage.Mover;
 					line = fromLine;
 					slot = fromSlot;
 					break;
@@ -177,6 +201,26 @@ namespace Board {
 
 				case Stage.Target:
 					PlayerCommands.Attack(player, fromLine, fromSlot, line, slot);
+					stage = Stage.None;
+					return;
+
+				case Stage.Mover: {
+					fromLine = line;
+					fromSlot = slot;
+					stage = Stage.Destination;
+					ArrayList cells = LegalCells();
+					if (cells.Count == 0) {
+						// Cannot normally happen: the Mover stage only offers entities with a step
+						stage = Stage.Mover;
+						MessageLog.Add("That entity has nowhere to step.");
+						return;
+					}
+					SetCell(cells, 0);
+					return;
+				}
+
+				case Stage.Destination:
+					PlayerCommands.Move(player, fromLine, fromSlot, line, slot);
 					stage = Stage.None;
 					return;
 			}
@@ -250,13 +294,7 @@ namespace Board {
 			if (index < 0 || index >= hand.Count)
 				return false;
 
-			Scroll scroll = (Scroll) hand[index];
-			short[] lines = PlayerCommands.PlaceLines(scroll);
-			for (int i = 0; i < lines.Length; i++)
-				for (int s = 0; s < BasicBoard.Slots; s++)
-					if (PlayerCommands.CanPlace(player, scroll, lines[i], s))
-						return true;
-			return false;
+			return PlayerCommands.CanPlaceAnywhere(player, (Scroll) hand[index]);
 		}
 
 		/**
@@ -381,6 +419,22 @@ namespace Board {
 				return cells;
 			}
 
+			if (stage == Stage.Mover) {
+				for (short l = 0; l < BasicBoard.Lines; l++)
+					for (short s = 0; s < BasicBoard.Slots; s++)
+						if (PlayerCommands.CanMoveFrom(player, l, s))
+							cells.Add(new int[] { l, s });
+				return cells;
+			}
+
+			if (stage == Stage.Destination) {
+				for (short l = 0; l < BasicBoard.Lines; l++)
+					for (short s = 0; s < BasicBoard.Slots; s++)
+						if (PlayerCommands.CanMoveTo(player, fromLine, fromSlot, l, s))
+							cells.Add(new int[] { l, s });
+				return cells;
+			}
+
 			return cells;
 		}
 
@@ -427,6 +481,10 @@ namespace Board {
 					return " Choose an attacker  |  ← → ↑ ↓ move  |  Enter select  |  Esc cancel ";
 				case Stage.Target:
 					return " Choose a target  |  ← → ↑ ↓ move  |  Enter attack  |  Esc back ";
+				case Stage.Mover:
+					return " Choose an entity  |  ← → ↑ ↓ move  |  Enter select  |  Esc cancel ";
+				case Stage.Destination:
+					return " Choose where it steps  |  ← → ↑ ↓ move  |  Enter move  |  Esc back ";
 				default:
 					return "";
 			}

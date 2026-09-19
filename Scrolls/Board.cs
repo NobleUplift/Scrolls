@@ -104,8 +104,8 @@ namespace Board {
 		public const int MinWidth = WidestRow + 2;
 		public const int MinHeight = CompactTotal + 3;
 
+		// Shown until the first turn begins, after which Turn.Banner has the row
 		public static string title = "";
-		public static string status = "";
 
 		private static ConsoleColor Fg = Screen.DefaultFg;
 		private static ConsoleColor Bg = Screen.DefaultBg;
@@ -190,8 +190,12 @@ namespace Board {
 			int middleRows = full ? FullMiddleRows : CompactMiddleRows;
 			int handRows = full ? FullHandRows : CompactHandRows;
 
+			/*
+			 * Once a turn is running the title row is the only thing on screen that
+			 * says whose turn it is, which matters when both players share a console.
+			 */
 			int y = 0;
-			Screen.WriteCentred(y, title, ConsoleColor.Yellow, Bg);
+			Screen.WriteCentred(y, Turn.Running ? Turn.Banner() : title, ConsoleColor.Yellow, Bg);
 			y += 1;
 
 			DrawHand(1, left, y, handRows);
@@ -490,6 +494,15 @@ namespace Board {
 					MarkSlot(actor, Selection.FromLine, Selection.FromSlot, Chosen);
 					MarkSlot(Selection.CursorPlayer, Selection.Line, Selection.Slot, Cursor);
 					break;
+
+				case Stage.Mover:
+					MarkSlot(actor, Selection.Line, Selection.Slot, Cursor);
+					break;
+
+				case Stage.Destination:
+					MarkSlot(actor, Selection.FromLine, Selection.FromSlot, Chosen);
+					MarkSlot(actor, Selection.Line, Selection.Slot, Cursor);
+					break;
 			}
 		}
 
@@ -592,10 +605,11 @@ namespace Board {
 		 * The verb list, or the cursor's key hints while a selection is running.
 		 *
 		 * The prompt is inert during a selection, so this row is the only place the
-		 * arrow keys are advertised.
+		 * arrow keys are advertised. The verb list is built by PlayerCommands from
+		 * the phase that is running rather than being a literal kept in step by hand.
 		 */
 		private static void DrawStatus(int row) {
-			string text = Selection.Active ? Selection.StatusText() : status;
+			string text = Selection.Active ? Selection.StatusText() : PlayerCommands.StatusText();
 			ConsoleColor colour = Selection.Active ? Cursor : ConsoleColor.DarkCyan;
 			Screen.Write(0, row, Clip(text, Screen.Width), colour, Bg);
 		}

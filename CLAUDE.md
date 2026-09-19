@@ -48,8 +48,15 @@ Ask the user to run it.
 
 ### Testing
 
-**There is no test project and no test runner.** The only automated verification is a render harness,
-which has to be written each time it is needed; it is not committed. It works like this:
+**There is no test project.** The automated verification is a render harness, `tools\RenderHarness.cs`,
+run by `tools\run-harness.ps1`, which builds into a scratch directory so the committed binaries under
+`Scrolls\bin\` are never touched. **Run it after any change to the renderer or the rules**, and extend
+it rather than leaving it behind: it covers deck loading, drawing, placing, the hand cap, deck
+exhaustion and row widths at six terminal sizes, and it will not compile at all if a member it uses
+has been removed.
+
+A throwaway harness for one feature is still worth writing, and the recipe is the same. It works like
+this:
 
 1. Compile a separate exe referencing the built `Scrolls.exe`:
    ```powershell
@@ -75,8 +82,17 @@ which has to be written each time it is needed; it is not committed. It works li
 3. Resize in the right order. The window can never exceed the buffer, so shrink the window first and
    grow the buffer first: `SetWindowSize(min(w, cur), min(h, cur))`, then `SetBufferSize(w, h)`, then
    `SetWindowSize(w, h)`. Then call `Screen.EnsureSize()`.
-4. Drive `Objects.Field`, `Deck`, `PlayerCommands` and `Board.Selection` directly, then call
-   `BasicBoard.Render`.
+4. Drive `Objects.Field`, `Deck`, `Commands.Turn`, `PlayerCommands` and `Board.Selection` directly,
+   then call `BasicBoard.Render`.
+
+   **`Turn.Begin` first, or nothing is legal.** `CanPlace`, `CanAttackFrom` and `CanMoveFrom` all
+   refuse while `Turn.Running` is false, so a harness that seeds a board and never begins a turn sees
+   every rule return false and reads that as a pass. `new Field(0, 0)` between tests is a clean board,
+   and `Turn.Begin` resets the turn state, so the two together isolate one case from the next.
+
+   The `Scroll` constructor is public, so synthetic cards (`new Scroll(id, line, ...)` with an
+   attack string of `"1:Hit:100"`) test the rules without touching the database at all. Use `Deck`
+   only when the point is the loading itself.
 5. Read `Board.Screen`'s private static `back` buffer by reflection and write the frame to a **file**.
    Do not print it: stdout goes to the allocated console, not to the captured pipe.
 
@@ -98,13 +114,14 @@ Five namespaces, and every file redundantly `using`s all five:
 - `Objects` (`Objects.cs`) - `Field` (global game state), `Deck` (database loader), `Scroll` (a card)
 - `Board` (`Screen.cs`, `Board.cs`, `Selection.cs`) - `Screen` (the frame buffer), `BasicBoard`
   (layout and drawing), `MessageLog` (scrollback), `Selection` (the modal cursor)
-- `Commands` (`Commands.cs`) - `SystemCommands` (automated sequences) and `PlayerCommands` (verbs)
+- `Commands` (`Commands.cs`, `Turn.cs`) - `SystemCommands` (automated sequences), `PlayerCommands`
+  (verbs) and `Turn` (the phase machine)
 - `ArtificialIntelligence` - an empty placeholder class
 
-`Board` is the one namespace spanning three files: `Screen.cs` knows about characters and the
-terminal, `Board.cs` knows about cards and layout, and `Selection.cs` knows where the cursor is but
-no game rules. Nothing outside `Screen.cs` may call `Console.Write`, or the buffers fall out of step
-with what the terminal is actually showing.
+`Board` spans three files: `Screen.cs` knows about characters and the terminal, `Board.cs` knows about
+cards and layout, and `Selection.cs` knows where the cursor is but no game rules. Nothing outside
+`Screen.cs` may call `Console.Write`, or the buffers fall out of step with what the terminal is
+actually showing.
 
 `Selection` calls into `Commands` for the rules and `Commands` calls into `Board` for `MessageLog`,
 so the two namespaces reference each other. That is legal within one assembly and every file already
@@ -242,16 +259,18 @@ one dispatch, and one redraw per iteration.
 
 `PlayerCommands.allCommands` and `helpText` are the single source of truth for verbs; `runCommand`
 parses a line into verb plus arguments and dispatches. Adding a verb means adding it to both tables
-and to the `switch`, and to `BasicBoard.status` in `Program.Main`, which is a third hand-maintained
-copy of the same list. The acting player is threaded through `runCommand` but there is no turn order
-yet, so everything runs as player 1.
+and to the `switch`. The status row is no longer a third copy: it is built by
+`PlayerCommands.StatusText` from the phase that is running. The acting player threaded through
+`runCommand` is `Turn.Active`.
 
 ### The selection cursor
 
-`Board.Selection` is a modal cursor in five stages: `None` while the player is typing, then
-`Hand` → `Place` for playing a scroll, and `Attacker` → `Target` for attacking. Bare `place` and
-bare `attack` at the prompt open the two chains; `place <hand> <line> <slot>` still works typed, and
-two arguments keep the original behaviour of taking the line from the card.
+`Board.Selection` is a modal cursor in seven stages: `None` while the player is typing, then
+`Hand` → `Place` for playing a scroll, `Attacker` → `Target` for attacking, and
+`Mover` → `Destination` for repositioning. Bare `place`, `attack` and `move` at the prompt open the
+three chains; `place <hand> <line> <slot>` still works typed, two arguments keep the original
+behaviour of taking the line from the card, and `move <line> <slot> <line> <slot>` is the typed
+reposition.
 
 While a stage is running it owns the keyboard. `Program.CursorKey` handles it and the text prompt is
 inert, so Enter and Escape mean one thing at a time. Arrow keys reach the input loop with a
@@ -269,6 +288,44 @@ or moving would drag it back to the first card each time.
 Up and down are not line indices. `DrawField` draws player 1's lines in reverse so both front lines
 meet in the middle, so `ScreenUpStep` flips the direction depending on whose field the cursor is
 standing on, which for the `Target` stage is the other player's.
+
+### Turns, rounds and phases
+
+`docs/GAMEPLAY.md` is the rules reference; `Commands.Turn` is the implementation. A turn is one
+player's six phases (`Phase.Draw`, `Interlude`, `Rallying`, `Skirmish`, `Regroup`, `End`) and a round
+is both players having taken one. The two players share one console: `Program` dispatches every verb
+as `Turn.Active`, so the turn passing is the whole of the hot seat handover.
+
+`Advance` is `Step` then `Settle`, and `Settle` calls `Enter` on each phase until one of them has
+something to wait for. **It cannot cycle because `Enter` returns false for the Rallying Phase
+whatever the board holds**, so any lap through the six phases stops there. Draw draws, Interlude has
+nothing to resolve while no card carries an effect, and stepping off `End` is what passes the turn,
+which is why there is no `PassTurn` call inside `Enter`.
+
+`Regroup` and `Retreat` are one enum value, told apart by `Turn.IsRegroup`, which is simply whether
+the turn destroyed anything. Only a Regroup allows an Equipment to be played, on an allowance of its
+own rather than the Rallying Phase's carried forward; both allow a reposition. **No entity reaches
+the field outside the Rallying Phase.**
+
+**The phase gates live inside the existing predicates, not at the call sites.** `CanPlace` asks
+`Turn.CanPlay` and `CanAttackFrom` asks `Turn.CanAttackNow` and the scroll's own `attacked` flag.
+`Selection.LegalCells` already filters every cell through those two, so spending an allowance removes
+the action from the cursor and refuses the typed command in the same instant, and neither can be
+changed without the other. Adding a new restriction means adding it to the predicate, never to a verb.
+
+`Scroll.attacked` is per instance and deliberately **not** carried by `Scroll.Copy`: copies are minted
+by `Deck.Make` before play, and `Turn` clears the flag for the active player as their turn begins.
+
+The Rallying Phase's "state change" and the Regroup or Retreat Phase's "position change" are one
+operation, `PlayerCommands.Move`, with a separate allowance in each phase. A step is one slot sideways
+or front to rear in the same column, into an empty cell on a line `PlaceLines` allows. `Movable` is
+split out from `CanMoveFrom` so that the two can both consult `CanMoveTo` without calling each other
+in a circle.
+
+`PlayerCommands.StatusText` builds the status row from the live phase. This replaced the literal
+`BasicBoard.status` assigned in `Program.Main`, which was a third hand-maintained copy of the verb
+list; `allCommands`, `helpText` and the `switch` in `runCommand` are the remaining two, and still need
+updating together.
 
 ### Placement and combat rules
 

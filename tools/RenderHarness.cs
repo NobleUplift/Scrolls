@@ -88,7 +88,6 @@ namespace Tools {
 		private static void RunChecks() {
 			Screen.Init("Scrolls render harness");
 			BasicBoard.title = "Welcome to Scrolls!";
-			BasicBoard.status = " draw | place <hand> <slot> | help | quit ";
 
 			new Field(40, 40);
 
@@ -148,6 +147,15 @@ namespace Tools {
 
 			Section("Placing");
 
+			/*
+			 * Nothing may be played until a turn is running: CanPlace asks Turn, and
+			 * without this every rule below returns false and reads as a pass. Begin
+			 * runs the Draw Phase, so the hand is seven by the time the place lands.
+			 */
+			Turn.Begin(0);
+			Check("the opening Draw Phase drew one", Field.scrollLists[0, 1].Count == 7,
+				  "got " + Field.scrollLists[0, 1].Count);
+
 			Scroll top = (Scroll) Field.scrollLists[0, 1][0];
 			short expectedLine = top.FieldLine();
 			PlayerCommands.place(0, new string[] { "1", "1" });
@@ -156,13 +164,13 @@ namespace Tools {
 				  Field.playerLines[0, expectedLine, 0] != null
 				  && Field.playerLines[0, expectedLine, 0].id == top.id,
 				  "expected " + top.nameAbb + " on line " + expectedLine);
-			Check("hand shrank by one after placing", Field.scrollLists[0, 1].Count == 5,
+			Check("hand shrank by one after placing", Field.scrollLists[0, 1].Count == 6,
 				  "got " + Field.scrollLists[0, 1].Count);
 			Check("scrollsIn matches scrollLists after place", CountsAgree(0), Counts(0));
 
 			PlayerCommands.place(0, new string[] { "99", "1" });
 			PlayerCommands.place(0, new string[] { "1", "9" });
-			Check("out-of-range place left the hand alone", Field.scrollLists[0, 1].Count == 5,
+			Check("out-of-range place left the hand alone", Field.scrollLists[0, 1].Count == 6,
 				  "got " + Field.scrollLists[0, 1].Count);
 
 			Section("Hand cap");

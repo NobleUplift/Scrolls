@@ -24,15 +24,6 @@ namespace Scrolls {
 	{
 		public const short DeckSize = 40;
 
-		/**
-		 * The acting player.
-		 *
-		 * There is no turn order yet, so every command runs as player 1. The value
-		 * is threaded through runCommand rather than hardcoded at the call site so
-		 * that adding turns later does not mean revisiting each verb.
-		 */
-		private static short currentPlayer = 0;
-
 		public static void Main(string[] args) {
 			/*
 			 * No SetWindowSize. Windows Terminal ignores it, which left every frame
@@ -41,8 +32,8 @@ namespace Scrolls {
 			 */
 			Screen.Init("Scrolls");
 
+			// Shown through the deal; the turn banner takes the row from Turn.Begin on
 			BasicBoard.title = "Welcome to Scrolls!";
-			BasicBoard.status = " draw | place | attack | help | quit ";
 
 			new Field(DeckSize, DeckSize);
 
@@ -70,6 +61,7 @@ namespace Scrolls {
 			MessageLog.Add("Type help for commands.");
 
 			SystemCommands.DrawHand();
+			Turn.Begin(0);
 			InputCommand();
 
 			Screen.Shutdown();
@@ -134,7 +126,8 @@ namespace Scrolls {
 
 				switch (key.Key) {
 					case ConsoleKey.Enter:
-						quit = PlayerCommands.runCommand(currentPlayer, input);
+						// Whoever's turn it is; the console is shared between the two
+						quit = PlayerCommands.runCommand(Turn.Active, input);
 						input = "";
 						dirty = true;
 						break;
